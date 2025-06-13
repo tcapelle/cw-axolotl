@@ -62,7 +62,7 @@ evals_per_epoch: 1
 saves_per_epoch:
 weight_decay: 0.01
 
-deepspeed: deepspeed_configs/zero1.json
+deepspeed: deepspeed_configs/zero2.json
 
 # New CW cluster resources
 gpu: 8
