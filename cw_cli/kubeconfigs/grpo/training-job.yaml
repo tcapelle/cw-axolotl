@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: cw-axolotl-training-job # Consider generateName for multiple runs: cw-axolotl-training-job-
+  name: cw-axolotl-train-grpo # Consider generateName for multiple runs: cw-axolotl-training-job-
   labels:
     app: axolotl-train
     task: training # Task label for anti-affinity
@@ -87,7 +87,7 @@ spec:
             sizeLimit: 500Gi # Adjust size as needed
         - name: config-volume
           configMap:
-            name: cw-axolotl-config
+            name: cw-axolotl-train-grpo-config
       restartPolicy: OnFailure
       # tolerations: ...
       # nodeSelector: ...

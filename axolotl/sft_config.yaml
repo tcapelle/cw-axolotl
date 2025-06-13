@@ -1,4 +1,4 @@
-base_model: Qwen/Qwen3-4B
+base_model: Qwen/Qwen3-32B
 
 plugins:
   - axolotl.integrations.liger.LigerPlugin
@@ -38,7 +38,7 @@ wandb_entity: grpo-cuda
 wandb_name: sft-qwen3-4b-boot
 wandb_log_model: 
 
-gradient_accumulation_steps: 1
+gradient_accumulation_steps: 2
 micro_batch_size: 4
 num_epochs: 5
 optimizer: adamw_torch_fused
@@ -62,7 +62,9 @@ evals_per_epoch: 1
 saves_per_epoch:
 weight_decay: 0.01
 
+deepspeed: deepspeed_configs/zero1.json
+
 # New CW cluster resources
-gpu: 4
-cpu: "32"
-memory: "500Gi"
+gpu: 8
+cpu: "64"
+memory: "1500Gi"

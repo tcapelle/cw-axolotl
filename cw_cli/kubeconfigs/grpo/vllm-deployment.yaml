@@ -23,7 +23,7 @@ spec:
           sizeLimit: 500Gi # Adjust size as needed
       - name: config-volume
         configMap:
-          name: cw-axolotl-config
+          name: cw-axolotl-train-grpo-config
       - name: model-checkpoints
         persistentVolumeClaim:
           claimName: model-checkpoints

@@ -200,7 +200,7 @@ def train_command(train_config) -> int:
         config_data = apply_overrides(config_data, overrides)
     
     # Generate unique names for this run
-    configmap_name = "cw-axolotl-train-config"
+    configmap_name = "cw-axolotl-train-sft-config"
     
     # Create ConfigMap YAML
     configmap_yaml = create_configmap_yaml(config_data, configmap_name)
@@ -228,7 +228,7 @@ def train_command(train_config) -> int:
     console.print("🎉 SFT job submitted successfully!", style="green bold")
     
     # Show logs command
-    job_name = "cw-axolotl-train"
+    job_name = "cw-axolotl-train-sft"
     console.print(f"\n💡 To monitor logs: [cyan]cw logs -j {job_name}[/]")
     
     # Ask to follow logs
@@ -290,7 +290,7 @@ def grpo_command(grpo_config) -> int:
     console.print("🎉 GRPO training started successfully!", style="green bold")
     
     # Show monitoring commands
-    job_name = "cw-axolotl-training-job"
+    job_name = "cw-axolotl-train-grpo"
     console.print(f"\n💡 Monitor with: [cyan]cw logs -j {job_name}[/]")
     console.print(f"💡 Check services: [cyan]cw pods -A[/]")
     
@@ -373,7 +373,7 @@ def delete_command(job: str) -> int:
             return 1
         
         # Check if this is a GRPO job by looking for GRPO services
-        is_grpo_job = job == "cw-axolotl-training-job" or _is_grpo_deployment_active()
+        is_grpo_job = job == "cw-axolotl-train-grpo" or _is_grpo_deployment_active()
         
         # Confirm deletion with appropriate warning
         if is_grpo_job:

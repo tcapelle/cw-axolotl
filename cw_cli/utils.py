@@ -238,7 +238,7 @@ def deploy_grpo_services(config_data: Dict[str, Any]) -> bool:
     grpo_dir = Path(__file__).parent / "kubeconfigs" / "grpo"
     
     # Create ConfigMap for GRPO config
-    configmap_name = "cw-axolotl-config"
+    configmap_name = "cw-axolotl-train-grpo-config"
     console.print("📝 Creating GRPO ConfigMap...", style="blue")
     configmap_yaml = create_configmap_yaml(config_data, configmap_name)
     
