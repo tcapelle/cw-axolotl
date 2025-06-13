@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cw-axolotl-rewards-server
+  name: cw-axolotl-rewards-server-grpo
   labels:
     app: axolotl-rewards
     task: rewards # Task label for anti-affinity
@@ -59,7 +59,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cw-axolotl-rewards-service
+  name: cw-axolotl-rewards-service-grpo
 spec:
   selector:
     app: axolotl-rewards # Matches the labels of the pods in your Deployment

@@ -286,10 +286,10 @@ def cleanup_grpo_services() -> bool:
     
     # List of GRPO resources to clean up
     grpo_resources = [
-        ("deployment", "cw-axolotl-vllm-server", "VLLM Server deployment"),
-        ("service", "cw-axolotl-vllm-service", "VLLM Server service"),
-        ("deployment", "cw-axolotl-rewards-server", "Rewards Server deployment"),
-        ("service", "cw-axolotl-rewards-service", "Rewards Server service")
+        ("deployment", "cw-axolotl-vllm-server-grpo", "VLLM Server deployment"),
+        ("service", "cw-axolotl-vllm-service-grpo", "VLLM Server service"),
+        ("deployment", "cw-axolotl-rewards-server-grpo", "Rewards Server deployment"),
+        ("service", "cw-axolotl-rewards-service-grpo", "Rewards Server service")
     ]
     
     for resource_type, resource_name, description in grpo_resources:

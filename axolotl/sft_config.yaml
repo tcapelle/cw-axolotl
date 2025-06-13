@@ -25,7 +25,7 @@ datasets:
 
 dataset_prepared_path: last_run_prepared
 val_set_size: 0.05
-output_dir: /model-checkpoints/sft-qwen3-4b-boot
+output_dir: /model-checkpoints/sft-qwen3-32b-boot
 save_only_model: true
 
 sequence_len: 10000
@@ -35,7 +35,7 @@ eval_sample_packing: false
 
 wandb_project: axolotl-sft
 wandb_entity: grpo-cuda
-wandb_name: sft-qwen3-4b-boot
+wandb_name: sft-qwen3-32b-boot
 wandb_log_model: 
 
 gradient_accumulation_steps: 2

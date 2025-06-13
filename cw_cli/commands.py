@@ -26,19 +26,9 @@ def _get_available_jobs() -> List[str]:
         return []
 
 
-def _is_grpo_deployment_active() -> bool:
-    """Check if GRPO services (VLLM or rewards) are currently running."""
-    try:
-        # Check for GRPO-specific deployments
-        result = kubectl("get", "deployments", "-l", "app=axolotl-vllm", "-o", "json", capture_output=True)
-        vllm_data = json.loads(result.stdout)
-        
-        result = kubectl("get", "deployments", "-l", "app=axolotl-rewards", "-o", "json", capture_output=True)
-        rewards_data = json.loads(result.stdout)
-        
-        return bool(vllm_data.get('items') or rewards_data.get('items'))
-    except Exception:
-        return False
+def _is_grpo_job(job_name: str) -> bool:
+    """Check if the given job is a GRPO job based on its name."""
+    return job_name == "cw-axolotl-train-grpo"
 
 
 def _prompt_job_selection(jobs: List[str], action: str) -> str:
@@ -372,8 +362,8 @@ def delete_command(job: str) -> int:
             console.print(f"❌ Error: This CLI can only delete jobs with 'cw-' prefix. '{job}' is not a CW-managed job.", style="red")
             return 1
         
-        # Check if this is a GRPO job by looking for GRPO services
-        is_grpo_job = job == "cw-axolotl-train-grpo" or _is_grpo_deployment_active()
+        # Check if this is a GRPO job based on job name
+        is_grpo_job = _is_grpo_job(job)
         
         # Confirm deletion with appropriate warning
         if is_grpo_job:

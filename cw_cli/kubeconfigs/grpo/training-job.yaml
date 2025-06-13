@@ -28,10 +28,10 @@ spec:
       initContainers:
       - name: wait-for-vllm
         image: busybox:1.28 # Or any small image with nc/curl
-        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
+        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service-grpo 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
       - name: wait-for-rewards
         image: busybox:1.28 # Or any small image with nc/curl
-        command: ['sh', '-c', 'until nc -zv cw-axolotl-rewards-service 9347; do echo "Waiting for rewards service..."; sleep 5; done']
+        command: ['sh', '-c', 'until nc -zv cw-axolotl-rewards-service-grpo 9347; do echo "Waiting for rewards service..."; sleep 5; done']
       # imagePullSecrets: ...
       containers:
       - name: axolotl-train-container
@@ -48,7 +48,7 @@ spec:
               name: wandb-api-key-secret # Name of the secret you created
               key: WANDB_API_KEY        # Key within the secret
         - name: TRITON_SERVER_URL
-          value: "http://cw-axolotl-rewards-service:9347"
+          value: "http://cw-axolotl-rewards-service-grpo:9347"
         - name: WEAVE_PRINT_CALL_LINK
           value: "0"
         - name: TOKENIZERS_PARALLELISM

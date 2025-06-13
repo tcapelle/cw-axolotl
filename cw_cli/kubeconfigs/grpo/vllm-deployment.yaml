@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cw-axolotl-vllm-server
+  name: cw-axolotl-vllm-server-grpo
   labels:
     app: axolotl-vllm
     task: serving # Task label for anti-affinity
@@ -85,7 +85,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cw-axolotl-vllm-service
+  name: cw-axolotl-vllm-service-grpo
 spec:
   selector:
     app: axolotl-vllm # Matches the labels of the pods in your Deployment
