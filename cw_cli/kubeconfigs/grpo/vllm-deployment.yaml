@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cw-axolotl-vllm-server
+  labels:
+    app: axolotl-vllm
+    task: serving # Task label for anti-affinity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: axolotl-vllm
+  template:
+    metadata:
+      labels:
+        app: axolotl-vllm # Pods get this label
+        task: serving     # And this task label
+    spec:
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 500Gi # Adjust size as needed
+      - name: config-volume
+        configMap:
+          name: cw-axolotl-config
+      - name: model-checkpoints
+        persistentVolumeClaim:
+          claimName: model-checkpoints
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: task # Avoid pods with these task labels
+                operator: In
+                values:
+                - training
+                - rewards
+            topologyKey: "kubernetes.io/hostname" # Spread across different nodes
+      # Uncomment and configure if your image is in a private registry:
+      # imagePullSecrets:
+      # - name: my-registry-secret
+      containers:
+      - name: axolotl-vllm-container
+        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        workingDir: /app/axolotl_dev
+        command: ["axolotl"]
+        args:
+          - "vllm-serve"
+          - "/mnt/axolotl-config/config.yaml"
+          - "--tensor-parallel-size"
+          - "8" # Matches 8 GPUs
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+            cpu: "32"
+            memory: "1000Gi"
+          requests:
+            cpu: "32"
+            memory: "1000Gi"
+            nvidia.com/gpu: "8"
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - name: config-volume
+          mountPath: /mnt/axolotl-config
+        - mountPath: /model-checkpoints
+          name: model-checkpoints
+        # If vllm-serve listens on a port (e.g., 8000) and you need to expose it:
+        ports:
+        - containerPort: 8000
+          name: http-vllm
+        - containerPort: 51216
+          name: weight-updates
+      # Add tolerations if your GPU nodes have taints
+      # tolerations:
+      # - key: "nvidia.com/gpu"
+      #   operator: "Exists"
+      #   effect: "NoSchedule"
+      # Add nodeSelector if you need to target specific types of GPU nodes
+      # nodeSelector:
+      #   cloud.google.com/gke-accelerator: nvidia-tesla-t4 # Example for GKE 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cw-axolotl-vllm-service
+spec:
+  selector:
+    app: axolotl-vllm # Matches the labels of the pods in your Deployment
+  ports:
+    - protocol: TCP
+      port: 8000 # Port on which the service is exposed
+      targetPort: 8000 # Port on the pod to forward traffic to (containerPort)
+      name: http-vllm
+    - protocol: TCP
+      port: 51216
+      targetPort: 51216
+      name: weight-updates
+  type: ClusterIP 

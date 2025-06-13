@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cw-axolotl-rewards-server
+  labels:
+    app: axolotl-rewards
+    task: rewards # Task label for anti-affinity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: axolotl-rewards
+  template:
+    metadata:
+      labels:
+        app: axolotl-rewards # Pods get this label
+        task: rewards        # And this task label
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: task # Avoid pods with these task labels
+                operator: In
+                values:
+                - serving
+                - training  
+            topologyKey: "kubernetes.io/hostname"
+      # imagePullSecrets: ...
+      containers:
+      - name: axolotl-rewards-container
+        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        workingDir: /app/axolotl_dev
+        command: ["python"]
+        args:
+          - "sandbox/server.py"
+        env:
+          - name: TASK_TIMEOUT_SECONDS
+            value: "240"
+          - name: WORKER_JOIN_TIMEOUT
+            value: "20"
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+            cpu: "32"
+            memory: "1000Gi"
+          requests:
+            cpu: "32"
+            memory: "1000Gi"
+            nvidia.com/gpu: "8"
+        ports:
+        # README mentioned ssh -L 9347:localhost:9347 for rewards server
+        - containerPort: 9347
+          name: http-rewards
+      # tolerations: ...
+      # nodeSelector: ... 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cw-axolotl-rewards-service
+spec:
+  selector:
+    app: axolotl-rewards # Matches the labels of the pods in your Deployment
+  ports:
+    - protocol: TCP
+      port: 9347 # Port on which the service is exposed
+      targetPort: 9347 # Port on the pod to forward traffic to (containerPort)
+  type: ClusterIP 

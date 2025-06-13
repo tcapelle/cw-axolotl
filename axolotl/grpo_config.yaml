@@ -1,0 +1,96 @@
+base_model: /model-checkpoints/sft-qwen4b-boot/
+# base_model: /workspace/data/axolotl-artifacts/grpo-beta-zero
+# Automatically upload checkpoint and final model to HF
+# hub_model_id: username/custom_model_name
+
+load_in_8bit: false
+load_in_4bit: false
+strict: false
+
+# torch_compile: true
+
+rl: grpo
+trl:
+  beta: 0.0
+  epsilon: 0.2
+  epsilon_high: 0.3 # as in mistral paper
+  loss_type: dr_grpo # default -> bnpo
+  scale_rewards: false # default -> true, should be false for dr_grpo
+  max_completion_length: 8192
+  num_generations: 24
+  use_vllm: true
+  vllm_server_host: "cw-axolotl-vllm-service"
+  vllm_server_port: 8000
+  reward_funcs:
+    - rewards.think_reward
+    - rewards.one_code_blob_reward
+    - rewards.reward_code_runs
+    - rewards.imports_decorator_reward
+    - rewards.constexpr_reward
+    - rewards.valid_tl_methods_reward
+    - rewards.masks_load_store_reward
+    - rewards.torch_empty_penalty
+    - rewards.torch_zeros_reward
+  reward_weights:
+  vllm: # stuff used by the trainer to call the vllm server
+    vllm_gpu_memory_utilization: 0.9
+
+
+chat_template: qwen_25
+datasets:
+  - path: tcapelle/boostrap_oai_pt_think ## ok
+    split: train
+    field_messages: prompt
+dataset_prepared_path: /workspace/data/last_run_prepared
+skip_prepare_dataset: true
+val_set_size: 0.0
+output_dir: /model-checkpoints/grpo-qwen3-4b
+
+dataloader_prefetch_factor: 32
+dataloader_num_workers: 2
+dataloader_pin_memory: true
+
+gc_steps: 1
+
+sequence_len: 8192
+sample_packing: false
+eval_sample_packing: false
+pad_to_sequence_len: false
+
+wandb_project: axolotl-grpo
+wandb_entity: grpo-cuda
+wandb_name: grpo-qwen3-4b
+wandb_log_model: checkpoint
+
+gradient_accumulation_steps: 2
+micro_batch_size: 12  # should match num_generations / num_gpus
+num_epochs: 5
+
+optimizer: adamw_torch_fused
+lr_scheduler: constant_with_warmup
+learning_rate: 1.0e-6
+max_grad_norm: 1.0e-2
+weight_decay: 0.01
+
+bf16: true
+tf32: true
+
+gradient_checkpointing: True
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+flash_attention: true
+
+logging_steps: 1
+warmup_steps: 100
+evals_per_epoch: 1
+saves_per_epoch: 1
+save_total_limit: 2
+save_only_model: true
+
+gc_steps: 1
+deepspeed: deepspeed_configs/zero2.json
+
+# New CW cluster resources
+gpu: 8
+cpu: "64"
+memory: "1200Gi"

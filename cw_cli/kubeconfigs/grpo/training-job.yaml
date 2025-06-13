@@ -1,0 +1,94 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cw-axolotl-training-job # Consider generateName for multiple runs: cw-axolotl-training-job-
+  labels:
+    app: axolotl-train
+    task: training # Task label for anti-affinity
+spec:
+  ttlSecondsAfterFinished: 0              # ← delete Job immediately after it finishes
+  backoffLimit: 0   
+  template:
+    metadata:
+      labels:
+        app: axolotl-train # Pods get this label
+        task: training     # And this task label
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: task # Avoid pods with these task labels
+                operator: In
+                values:
+                - serving
+                - rewards
+            topologyKey: "kubernetes.io/hostname"
+      initContainers:
+      - name: wait-for-vllm
+        image: busybox:1.28 # Or any small image with nc/curl
+        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
+      - name: wait-for-rewards
+        image: busybox:1.28 # Or any small image with nc/curl
+        command: ['sh', '-c', 'until nc -zv cw-axolotl-rewards-service 9347; do echo "Waiting for rewards service..."; sleep 5; done']
+      # imagePullSecrets: ...
+      containers:
+      - name: axolotl-train-container
+        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        workingDir: /app/axolotl_dev
+        command: ["axolotl"]
+        args:
+          - "train"
+          - "/mnt/axolotl-config/config.yaml"
+        env:
+        - name: WANDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb-api-key-secret # Name of the secret you created
+              key: WANDB_API_KEY        # Key within the secret
+        - name: TRITON_SERVER_URL
+          value: "http://cw-axolotl-rewards-service:9347"
+        - name: WEAVE_PRINT_CALL_LINK
+          value: "0"
+        - name: TOKENIZERS_PARALLELISM
+          value: "0"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret # Name of the secret for HF_TOKEN
+              key: HF_TOKEN        # Key within the hf-token-secret
+        # You can add other environment variables here if needed
+        # - name: ANOTHER_ENV_VAR
+        #   value: "some_value"
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - name: config-volume
+            mountPath: /mnt/axolotl-config
+          - mountPath: /model-checkpoints
+            name: model-checkpoints
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+            cpu: "32"
+            memory: "1600Gi"
+          requests:
+            cpu: "32"
+            memory: "1600Gi"
+            nvidia.com/gpu: "8"
+      volumes:
+        - name: model-checkpoints
+          persistentVolumeClaim:
+            claimName: model-checkpoints
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 500Gi # Adjust size as needed
+        - name: config-volume
+          configMap:
+            name: cw-axolotl-config
+      restartPolicy: OnFailure
+      # tolerations: ...
+      # nodeSelector: ...
+  backoffLimit: 0 # No retries for the job on failure 
