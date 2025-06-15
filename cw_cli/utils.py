@@ -43,7 +43,13 @@ def create_configmap_yaml(config_data: Dict[str, Any], configmap_name: str) -> s
 def update_job_yaml_with_resources(job_yaml_path: Path, config_data: Dict[str, Any]) -> str:
     """Update the job YAML with resource requirements from the config."""
     with open(job_yaml_path, 'r') as f:
-        job_data = yaml.safe_load(f)
+        yaml_content = f.read()
+    
+    # Substitute the default image
+    yaml_content = substitute_image_in_yaml(yaml_content)
+    
+    # Parse the updated YAML
+    job_data = yaml.safe_load(yaml_content)
     
     # Extract resource requirements from config if they exist
     resources = {}
@@ -203,6 +209,9 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
     
+    # Substitute the default image
+    yaml_content = substitute_image_in_yaml(yaml_content)
+    
     # Split multi-document YAML if needed
     yaml_docs = list(yaml.safe_load_all(yaml_content))
     
@@ -308,3 +317,29 @@ def cleanup_grpo_services() -> bool:
             console.print(f"ℹ️  No {resource_type}s found", style="cyan")
     
     return success
+
+
+def get_default_image() -> str:
+    """Get the default container image from config."""
+    try:
+        config_path = Path(__file__).parent / "config" / "default_image.yaml"
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            return config.get('default_image', 'ghcr.io/tcapelle/triton_eval:1506')
+    except Exception:
+        return 'ghcr.io/tcapelle/triton_eval:1506'
+
+
+def substitute_image_in_yaml(yaml_content: str, image: str = None) -> str:
+    """Replace placeholder images in YAML content."""
+    if image is None:
+        image = get_default_image()
+    
+    # Replace common image patterns
+    yaml_content = yaml_content.replace('ghcr.io/tcapelle/triton_eval:1306', image)
+    yaml_content = yaml_content.replace('ghcr.io/tcapelle/triton_eval:1506', image)
+    
+    # Also replace any ${DEFAULT_IMAGE} placeholders if we add them later
+    yaml_content = yaml_content.replace('${DEFAULT_IMAGE}', image)
+    
+    return yaml_content
