@@ -43,7 +43,7 @@ spec:
       # - name: my-registry-secret
       containers:
       - name: axolotl-vllm-container
-        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        image: ghcr.io/tcapelle/triton_eval:1506 # <-- UPDATE THIS
         workingDir: /app/axolotl_dev
         command: ["axolotl"]
         args:

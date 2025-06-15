@@ -28,19 +28,32 @@ spec:
       initContainers:
       - name: wait-for-vllm
         image: busybox:1.28 # Or any small image with nc/curl
-        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service-grpo 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
+        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
       - name: wait-for-rewards
         image: busybox:1.28 # Or any small image with nc/curl
         command: ['sh', '-c', 'until nc -zv cw-axolotl-rewards-service-grpo 9347; do echo "Waiting for rewards service..."; sleep 5; done']
       # imagePullSecrets: ...
       containers:
       - name: axolotl-train-container
-        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        image: ghcr.io/tcapelle/triton_eval:1506 # <-- UPDATE THIS
         workingDir: /app/axolotl_dev
-        command: ["axolotl"]
+        command: ["sh"]
         args:
-          - "train"
-          - "/mnt/axolotl-config/config.yaml"
+          - "-c"
+          - |
+            # Create logs directory based on output_dir from config
+            OUTPUT_DIR=$(grep "^output_dir:" /mnt/axolotl-config/config.yaml | cut -d' ' -f2)
+            LOGS_DIR="${OUTPUT_DIR}/logs"
+            mkdir -p "${LOGS_DIR}"
+            
+            # Generate log filename with timestamp
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            LOG_FILE="${LOGS_DIR}/grpo_training_${TIMESTAMP}.log"
+            
+            echo "Saving logs to: ${LOG_FILE}"
+            
+            # Run axolotl and tee output to both stdout and log file
+            axolotl train /mnt/axolotl-config/config.yaml 2>&1 | tee "${LOG_FILE}"
         env:
         - name: WANDB_API_KEY
           valueFrom:

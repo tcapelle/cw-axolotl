@@ -31,7 +31,7 @@ spec:
       # imagePullSecrets: ...
       containers:
       - name: axolotl-rewards-container
-        image: ghcr.io/tcapelle/triton_eval:1306 # <-- UPDATE THIS
+        image: ghcr.io/tcapelle/triton_eval:1506 # <-- UPDATE THIS
         workingDir: /app/axolotl_dev
         command: ["python"]
         args:
