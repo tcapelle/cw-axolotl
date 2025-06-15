@@ -16,6 +16,7 @@ spec:
         app: axolotl-rewards # Pods get this label
         task: rewards        # And this task label
     spec:
+      terminationGracePeriodSeconds: 30
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

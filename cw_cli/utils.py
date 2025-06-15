@@ -284,20 +284,27 @@ def cleanup_grpo_services() -> bool:
     """Clean up all GRPO services (deployments and services)."""
     success = True
     
-    # List of GRPO resources to clean up
-    grpo_resources = [
-        ("deployment", "cw-axolotl-vllm-server-grpo", "VLLM Server deployment"),
-        ("service", "cw-axolotl-vllm-service-grpo", "VLLM Server service"),
-        ("deployment", "cw-axolotl-rewards-server-grpo", "Rewards Server deployment"),
-        ("service", "cw-axolotl-rewards-service-grpo", "Rewards Server service")
-    ]
+    # Clean up all resources with cw-vllm and cw-rewards prefixes
+    resource_prefixes = ["cw-vllm", "cw-rewards"]
+    resource_types = ["deployment", "service"]
     
-    for resource_type, resource_name, description in grpo_resources:
+    for resource_type in resource_types:
         try:
-            kubectl("delete", resource_type, resource_name)
-            console.print(f"✅ {description} deleted", style="green")
+            # Get all resources of this type
+            result = kubectl("get", resource_type, "-o", "json", capture_output=True)
+            resources_data = yaml.safe_load(result.stdout)
+            
+            # Filter resources with cw-vllm or cw-rewards prefixes
+            for item in resources_data.get("items", []):
+                resource_name = item["metadata"]["name"]
+                if any(resource_name.startswith(prefix) for prefix in resource_prefixes):
+                    try:
+                        kubectl("delete", resource_type, resource_name)
+                        console.print(f"✅ {resource_type.capitalize()} {resource_name} deleted", style="green")
+                    except subprocess.CalledProcessError:
+                        console.print(f"⚠️  Failed to delete {resource_type} {resource_name}", style="yellow")
+                        success = False
         except subprocess.CalledProcessError:
-            console.print(f"ℹ️  {description} not found (may already be deleted)", style="cyan")
-            # Don't mark as failure since resource may not exist
+            console.print(f"ℹ️  No {resource_type}s found", style="cyan")
     
     return success

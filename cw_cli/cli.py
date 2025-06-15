@@ -89,7 +89,7 @@ def main():
     
     delete_parser = subparsers_dict.add_parser("delete", help="Delete job")
     delete_parser.add_arguments(DeleteConfig, dest="delete_config")
-    delete_parser.set_defaults(func=lambda args: delete_command(args.delete_config.job))
+    delete_parser.set_defaults(func=lambda args: delete_command(args.delete_config.job, args.delete_config.force))
     
     # Legacy
     list_parser = subparsers_dict.add_parser("list", help="List axolotl jobs")

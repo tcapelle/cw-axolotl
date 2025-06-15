@@ -347,9 +347,110 @@ def status_command(job: str, watch: bool = False, output: str = "table") -> int:
         return 1
 
 
-def delete_command(job: str) -> int:
+def _force_delete_resources() -> int:
+    """Force delete any CW resources (jobs, deployments, services)."""
+    from rich.prompt import Prompt
+    import subprocess
+    
+    # Get all CW resources
+    cw_resources = []
+    
+    # Get jobs
+    try:
+        result = kubectl("get", "jobs", "-o", "json", capture_output=True)
+        jobs_data = yaml.safe_load(result.stdout)
+        for item in jobs_data.get("items", []):
+            name = item["metadata"]["name"]
+            if name.startswith("cw-"):
+                cw_resources.append(("job", name))
+    except subprocess.CalledProcessError:
+        pass
+    
+    # Get deployments
+    try:
+        result = kubectl("get", "deployments", "-o", "json", capture_output=True)
+        deployments_data = yaml.safe_load(result.stdout)
+        for item in deployments_data.get("items", []):
+            name = item["metadata"]["name"]
+            if name.startswith("cw-"):
+                cw_resources.append(("deployment", name))
+    except subprocess.CalledProcessError:
+        pass
+    
+    # Get services
+    try:
+        result = kubectl("get", "services", "-o", "json", capture_output=True)
+        services_data = yaml.safe_load(result.stdout)
+        for item in services_data.get("items", []):
+            name = item["metadata"]["name"]
+            if name.startswith("cw-"):
+                cw_resources.append(("service", name))
+    except subprocess.CalledProcessError:
+        pass
+    
+    if not cw_resources:
+        console.print("✅ No CW resources found to delete", style="green")
+        return 0
+    
+    # Display available resources
+    console.print("🗑️  Found CW resources:", style="bold blue")
+    for i, (resource_type, name) in enumerate(cw_resources, 1):
+        console.print(f"  {i}. {resource_type}: {name}")
+    
+    # Prompt for selection
+    try:
+        choice = Prompt.ask(
+            "Select resource to delete (number) or 'all' to delete all",
+            choices=[str(i) for i in range(1, len(cw_resources) + 1)] + ["all", "q"]
+        )
+    except KeyboardInterrupt:
+        console.print("\n⏹️ Cancelled", style="yellow")
+        return 0
+    
+    if choice == "q":
+        return 0
+    
+    # Confirm deletion
+    if choice == "all":
+        response = console.input("⚠️  Are you sure you want to delete ALL CW resources? (y/N): ").strip().lower()
+        if response not in ['y', 'yes']:
+            console.print("⏹️ Deletion cancelled", style="yellow")
+            return 0
+        
+        # Delete all resources
+        for resource_type, name in cw_resources:
+            try:
+                kubectl("delete", resource_type, name)
+                console.print(f"✅ {resource_type.capitalize()} {name} deleted", style="green")
+            except subprocess.CalledProcessError as e:
+                console.print(f"❌ Failed to delete {resource_type} {name}: {e}", style="red")
+    else:
+        # Delete selected resource
+        idx = int(choice) - 1
+        resource_type, name = cw_resources[idx]
+        
+        response = console.input(f"⚠️  Are you sure you want to delete {resource_type} {name}? (y/N): ").strip().lower()
+        if response not in ['y', 'yes']:
+            console.print("⏹️ Deletion cancelled", style="yellow")
+            return 0
+        
+        try:
+            kubectl("delete", resource_type, name)
+            console.print(f"✅ {resource_type.capitalize()} {name} deleted", style="green")
+        except subprocess.CalledProcessError as e:
+            console.print(f"❌ Failed to delete {resource_type} {name}: {e}", style="red")
+            return 1
+    
+    return 0
+
+
+def delete_command(job: str, force: bool = False) -> int:
     """Delete job and associated resources."""
     try:
+        # If force flag is used, show all CW resources for selection
+        if force:
+            return _force_delete_resources()
+        
         # If no job specified, prompt user to select
         if not job:
             available_jobs = _get_available_jobs()

@@ -85,7 +85,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cw-axolotl-vllm-service-grpo
+  name: cw-axolotl-vllm-service
 spec:
   selector:
     app: axolotl-vllm # Matches the labels of the pods in your Deployment

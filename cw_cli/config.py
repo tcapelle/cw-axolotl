@@ -36,6 +36,7 @@ class StatusConfig:
 class DeleteConfig:
     """Delete job and associated resources"""
     job: str = field(default="", help="Job name (optional)")
+    force: bool = field(default=False, alias="--force", help="Force delete any CW resources (deployments, services, jobs)")
 
 
 @dataclass
