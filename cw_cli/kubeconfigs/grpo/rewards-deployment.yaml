@@ -33,9 +33,19 @@ spec:
       - name: axolotl-rewards-container
         image: ghcr.io/tcapelle/triton_eval:1506 # <-- UPDATE THIS
         workingDir: /app/axolotl_dev
-        command: ["python"]
+        command: ["sh"]
         args:
-          - "sandbox/server.py"
+          - "-c"
+          - |
+            # Pull latest axolotl_dev if requested
+            if [ "${PULL_LATEST:-false}" = "true" ]; then
+              echo "🔄 Pulling latest axolotl_dev code..."
+              cd /app/axolotl_dev && git pull origin main
+              echo "✅ Code updated successfully"
+            fi
+            
+            # Run rewards server
+            python sandbox/server.py
         env:
           - name: TASK_TIMEOUT_SECONDS
             value: "240"
@@ -44,12 +54,12 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: "8"
-            cpu: "32"
-            memory: "1000Gi"
+            cpu: "64"
+            memory: "1500Gi"
           requests:
             cpu: "32"
             memory: "1000Gi"
-            nvidia.com/gpu: "8"
+            nvidia.com/gpu: "6"
         ports:
         # README mentioned ssh -L 9347:localhost:9347 for rewards server
         - containerPort: 9347

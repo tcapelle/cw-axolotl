@@ -5,11 +5,13 @@ A Kubernetes-based command-line interface for managing machine learning training
 ## Features
 
 - 🚀 **Simple Training Deployment**: Launch SFT and GRPO training jobs with a single command
-- 🎯 **Resource-Aware**: Automatic GPU, CPU, and memory management
+- 🎯 **Resource-Aware**: Automatic GPU, CPU, and memory management with availability checking
 - 📊 **Real-time Monitoring**: Live cluster status, job progress, and resource utilization
 - 🔧 **Interactive Management**: Easy job selection, log viewing, and cleanup
 - 🛡️ **Safe Operations**: Only manages CW-prefixed resources to prevent accidents
-- ⚡ **Development-Friendly**: Command-line parameter overrides for quick experimentation
+- ⚡ **Development-Friendly**: Command-line parameter overrides and latest code pulling
+- 📈 **Resource Planning**: Check available cluster capacity before launching jobs
+- 🧹 **Smart Cleanup**: Automatic log saving and force cleanup for stuck resources
 
 ## Installation
 
@@ -49,14 +51,17 @@ cw jobs
 # Monitor pods in real-time
 cw pods -w
 
-# Check cluster resources
+# Check available cluster resources
+cw resources
+
+# Check cluster nodes
 cw nodes
 
-# View job logs
-cw logs my-training-job
+# View job logs (interactive selection)
+cw logs
 
-# Follow logs in real-time
-cw logs my-training-job -f
+# Follow logs in real-time (default behavior)
+cw logs -j my-training-job
 ```
 
 ### 3. Manage Jobs
@@ -76,7 +81,7 @@ cw list
 
 ### Training Commands
 
-#### `cw axolotl train <config>`
+#### `cw axolotl train <config> [--pull]`
 Launch a Supervised Fine-Tuning job.
 
 ```bash
@@ -88,9 +93,12 @@ cw axolotl train my_config.yaml --gpu 4 --cpu 32 --memory 500Gi
 
 # With training parameter overrides
 cw axolotl train my_config.yaml --learning_rate 2e-5 --batch_size 8
+
+# Pull latest axolotl_dev code before training
+cw axolotl train my_config.yaml --pull
 ```
 
-#### `cw axolotl grpo <config>`
+#### `cw axolotl grpo <config> [--pull]`
 Launch a GRPO training job with VLLM server, rewards server, and training components.
 
 ```bash
@@ -99,22 +107,30 @@ cw axolotl grpo grpo_config.yaml
 
 # With custom resources
 cw axolotl grpo grpo_config.yaml --gpu 8 --memory 1000Gi
+
+# Pull latest code for all services (training, vllm, rewards)
+cw axolotl grpo grpo_config.yaml --pull
 ```
+
+**Note**: The `--pull` flag executes `git pull origin main` in `/app/axolotl_dev` before starting any services, ensuring you're using the latest code.
 
 ### Monitoring Commands
 
-#### `cw jobs [--namespace <ns>]`
+#### `cw jobs [-n <ns>] [-A|--all-namespaces]`
 List all jobs in the cluster.
 
 ```bash
-# All jobs
+# All jobs in default namespace
 cw jobs
 
 # Jobs in specific namespace
-cw jobs --namespace my-namespace
+cw jobs -n my-namespace
+
+# Jobs across all namespaces
+cw jobs -A
 ```
 
-#### `cw pods [-w|--watch] [--namespace <ns>]`
+#### `cw pods [-w|--watch] [-n <ns>] [-A|--all-namespaces] [-r|--show-resources]`
 List all pods with resource information.
 
 ```bash
@@ -124,39 +140,68 @@ cw pods
 # Watch pods in real-time (refreshes every 2 seconds)
 cw pods -w
 
+# Show resource requests/limits
+cw pods -r
+
 # Pods in specific namespace
-cw pods --namespace my-namespace
+cw pods -n my-namespace
+
+# Pods across all namespaces
+cw pods -A
+
+# Watch pods with resources across all namespaces
+cw pods -w -r -A
 ```
 
-#### `cw nodes`
-Show cluster information and node details.
+#### `cw resources [-d|--detailed] [-a|--only-available]`
+Show available cluster resources (GPU, CPU, Memory).
 
 ```bash
-cw nodes
+# Basic resource overview
+cw resources
+
+# Detailed GPU breakdown per node
+cw resources -d
+
+# Show only nodes with available resources
+cw resources -a
+
+# Combine flags for detailed view of available nodes only
+cw resources -d -a
 ```
 
 Example output:
 ```
-Cluster Overview:
-┌─────────────┬───────┐
-│ GPU Type    │ Count │
-├─────────────┼───────┤
-│ H100        │ 32    │
-│ A100        │ 16    │
-└─────────────┴───────┘
+🖥️ Cluster Resource Summary
+┌─────────┬──────────┬───────────┬────────────┬──────────┬─────────────────────────┐
+│ Node    │ Status   │ GPUs      │ CPU        │ Memory   │ Availability            │
+├─────────┼──────────┼───────────┼────────────┼──────────┼─────────────────────────┤
+│ g122466 │ Ready    │ 5/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (5 GPUs)   │
+│ gd8ff0c │ Ready    │ 6/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (6 GPUs)   │
+│ gd96896 │ Ready    │ 6/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (6 GPUs)   │
+│ gf43324 │ Ready    │ 8/8 free  │ 128.0 cores│ 2062Gi   │ ✅ Full node (8+ GPUs) │
+└─────────┴──────────┴───────────┴────────────┴──────────┴─────────────────────────┘
 
-Node Details:
-┌──────────────┬────────┬──────────┬────────────┬────────┐
-│ Node         │ GPUs   │ CPU      │ Memory     │ Status │
-├──────────────┼────────┼──────────┼────────────┼────────┤
-│ gpu-node-1   │ 8xH100 │ 128 CPUs │ 2048Gi     │ Ready  │
-│ gpu-node-2   │ 8xA100 │ 96 CPUs  │ 1536Gi     │ Ready  │
-└──────────────┴────────┴──────────┴────────────┴────────┘
+📊 Summary:
+• Available full nodes (8+ GPUs): 1
+• Total free GPUs: 25
+• GPU nodes: 15
+```
+
+#### `cw nodes [-n|--nodes]`
+Show cluster information and node details.
+
+```bash
+# Basic cluster overview
+cw nodes
+
+# Detailed node information
+cw nodes -n
 ```
 
 ### Management Commands
 
-#### `cw describe [job]`
+#### `cw describe [job] [-w|--watch] [-o <format>]`
 Check detailed job status.
 
 ```bash
@@ -165,23 +210,30 @@ cw describe
 
 # Specific job
 cw describe my-training-job
+
+# Watch job status in real-time
+cw describe my-training-job -w
+
+# Output in different formats
+cw describe my-training-job -o yaml
+cw describe my-training-job -o json
 ```
 
-#### `cw logs [job] [-f|--follow]`
+#### `cw logs [-j <job>] [-n|--no-follow]`
 View job logs.
 
 ```bash
-# Interactive job selection
+# Interactive job selection (follows by default)
 cw logs
 
-# Specific job
-cw logs my-training-job
+# Specific job (follows by default)
+cw logs -j my-training-job
 
-# Follow logs in real-time
-cw logs my-training-job -f
+# Show logs once without following
+cw logs -j my-training-job -n
 ```
 
-#### `cw delete [job]`
+#### `cw delete [job] [--force]`
 Delete jobs and associated resources.
 
 ```bash
@@ -190,7 +242,12 @@ cw delete
 
 # Specific job
 cw delete my-training-job
+
+# Force delete any CW resources (jobs, deployments, services)
+cw delete --force
 ```
+
+**Note**: The `--force` flag allows you to select and delete any CW-prefixed resources, including stuck deployments or services that weren't properly cleaned up.
 
 #### `cw list`
 List only CW-managed jobs (legacy command).
@@ -275,7 +332,7 @@ cw axolotl train axolotl/sft_config.yaml
 cw pods -w
 
 # View logs
-cw logs  # Will prompt to select the job
+cw logs  # Interactive selection, follows by default
 
 # Check detailed status
 cw describe
@@ -307,9 +364,9 @@ cw pods -w
 
 # Check logs for each component
 cw jobs  # See all 3 services
-cw logs grpo-training-job
-cw logs grpo-vllm-server
-cw logs grpo-rewards-server
+cw logs -j grpo-training-job
+cw logs -j grpo-vllm-server
+cw logs -j grpo-rewards-server
 
 # Cleanup when done
 cw delete grpo-training-job  # Cleans up all related resources
@@ -328,9 +385,9 @@ cw jobs
 cw pods
 
 # Compare logs
-cw logs exp1
-cw logs exp2
-cw logs exp3
+cw logs -j exp1
+cw logs -j exp2
+cw logs -j exp3
 ```
 
 ## Troubleshooting
@@ -345,7 +402,13 @@ cw logs exp3
 ### Debug Commands
 
 ```bash
-# Check cluster resources
+# Check available cluster resources
+cw resources
+
+# Check detailed resource breakdown
+cw resources -d
+
+# Check cluster nodes
 cw nodes
 
 # Check all pods status
@@ -355,8 +418,29 @@ cw pods
 cw describe my-job
 
 # Check job logs
-cw logs my-job
+cw logs -j my-job
+
+# Force cleanup stuck resources
+cw delete --force
 ```
+
+### Resource Planning
+
+Before launching training jobs, use `cw resources` to check availability:
+
+```bash
+# Quick resource check
+cw resources
+
+# Detailed view for resource planning
+cw resources -d -a
+```
+
+This helps you:
+- See which nodes have enough free GPUs for your job
+- Check available memory and CPU capacity
+- Identify nodes that might be unavailable due to scheduling issues
+- Plan resource allocation for multiple concurrent jobs
 
 ## Development
 

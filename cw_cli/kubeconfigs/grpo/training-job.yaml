@@ -41,6 +41,13 @@ spec:
         args:
           - "-c"
           - |
+            # Pull latest axolotl_dev if requested
+            if [ "${PULL_LATEST:-false}" = "true" ]; then
+              echo "🔄 Pulling latest axolotl_dev code..."
+              cd /app/axolotl_dev && git pull origin main
+              echo "✅ Code updated successfully"
+            fi
+            
             # Create logs directory based on output_dir from config
             OUTPUT_DIR=$(grep "^output_dir:" /mnt/axolotl-config/config.yaml | cut -d' ' -f2)
             LOGS_DIR="${OUTPUT_DIR}/logs"
@@ -84,11 +91,11 @@ spec:
         resources:
           limits:
             nvidia.com/gpu: "8"
-            cpu: "32"
-            memory: "1600Gi"
+            cpu: "64"
+            memory: "2000Gi"
           requests:
             cpu: "32"
-            memory: "1600Gi"
+            memory: "1500Gi"
             nvidia.com/gpu: "8"
       volumes:
         - name: model-checkpoints

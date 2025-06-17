@@ -198,7 +198,7 @@ def train_command(train_config) -> int:
     # Load and update job YAML
     job_yaml_path = Path(__file__).parent / "kubeconfigs" / "sft_job.yaml"
     try:
-        job_yaml = update_job_yaml_with_resources(job_yaml_path, config_data)
+        job_yaml = update_job_yaml_with_resources(job_yaml_path, config_data, train_config.pull)
     except Exception as e:
         console.print(f"❌ Error processing job YAML: {e}", style="red")
         return 1
@@ -274,7 +274,7 @@ def grpo_command(grpo_config) -> int:
     
     # Deploy GRPO services
     console.print("🚀 Deploying GRPO services...", style="blue")
-    if not deploy_grpo_services(config_data):
+    if not deploy_grpo_services(config_data, grpo_config.pull):
         return 1
     
     console.print("🎉 GRPO training started successfully!", style="green bold")
@@ -344,6 +344,168 @@ def status_command(job: str, watch: bool = False, output: str = "table") -> int:
         return handle_status_output(job, watch, output)
     except subprocess.CalledProcessError as e:
         console.print(f"❌ Failed to get status: {e}", style="red")
+        return 1
+
+
+def resources_command(detailed: bool = False, only_available: bool = False) -> int:
+    """Show available cluster resources (CPU, Memory, GPU)."""
+    try:
+        from rich.table import Table
+        from rich import box
+        import json
+        
+        # Get nodes data
+        result = kubectl("get", "nodes", "-o", "json", capture_output=True)
+        nodes_data = yaml.safe_load(result.stdout)
+        
+        # Create main summary table
+        summary_table = Table(box=box.ROUNDED, title="🖥️ Cluster Resource Summary")
+        summary_table.add_column("Node", style="cyan")
+        summary_table.add_column("Status", style="yellow")
+        summary_table.add_column("GPUs", style="green")
+        summary_table.add_column("CPU", style="blue")
+        summary_table.add_column("Memory", style="magenta")
+        summary_table.add_column("Availability", style="white")
+        
+        total_gpus_free = 0
+        total_nodes_available = 0
+        gpu_nodes = []
+        
+        for node in nodes_data.get("items", []):
+            node_name = node["metadata"]["name"]
+            
+            # Get node status
+            conditions = node.get("status", {}).get("conditions", [])
+            ready_condition = next((c for c in conditions if c["type"] == "Ready"), {})
+            is_ready = ready_condition.get("status") == "True"
+            
+            # Check if scheduling is disabled
+            spec = node.get("spec", {})
+            unschedulable = spec.get("unschedulable", False)
+            
+            if unschedulable:
+                status = "SchedulingDisabled"
+            elif not is_ready:
+                status = "NotReady"
+            else:
+                status = "Ready"
+            
+            # Get resource capacity and allocatable
+            capacity = node.get("status", {}).get("capacity", {})
+            allocatable = node.get("status", {}).get("allocatable", {})
+            
+            # Parse GPU info
+            gpu_capacity = capacity.get("nvidia.com/gpu", "0")
+            if gpu_capacity == "0" or gpu_capacity is None:
+                gpu_info = "No GPUs"
+                gpu_free = 0
+            else:
+                # Get GPU allocation from describe (we need current usage)
+                try:
+                    describe_result = kubectl("describe", "node", node_name, capture_output=True)
+                    describe_text = describe_result.stdout
+                    
+                    # Extract GPU usage from describe output
+                    gpu_used = 0
+                    for line in describe_text.split('\n'):
+                        if 'nvidia.com/gpu' in line and 'Allocated resources' in describe_text[describe_text.find(line)-500:describe_text.find(line)]:
+                            parts = line.strip().split()
+                            if len(parts) >= 3:
+                                try:
+                                    gpu_used = int(parts[1])
+                                    break
+                                except:
+                                    pass
+                    
+                    gpu_total = int(gpu_capacity)
+                    gpu_free = max(0, gpu_total - gpu_used)
+                    gpu_info = f"{gpu_free}/{gpu_total} free"
+                    
+                    if gpu_total > 0:
+                        gpu_nodes.append((node_name, gpu_free, gpu_total, status))
+                        if status == "Ready":
+                            total_gpus_free += gpu_free
+                    
+                except:
+                    gpu_info = f"?/{gpu_capacity}"
+                    gpu_free = 0
+            
+            # Parse CPU and Memory
+            cpu_allocatable = allocatable.get("cpu", "0")
+            memory_allocatable = allocatable.get("memory", "0Ki")
+            
+            # Convert CPU (e.g., "127960m" -> "127.96")
+            if cpu_allocatable.endswith('m'):
+                cpu_cores = float(cpu_allocatable[:-1]) / 1000
+                cpu_info = f"{cpu_cores:.1f} cores"
+            else:
+                cpu_info = f"{cpu_allocatable} cores"
+            
+            # Convert Memory (e.g., "2111839476Ki" -> "2062 Gi")
+            if memory_allocatable.endswith('Ki'):
+                memory_gi = int(memory_allocatable[:-2]) / (1024 * 1024)
+                memory_info = f"{memory_gi:.0f}Gi"
+            else:
+                memory_info = memory_allocatable
+            
+            # Determine availability
+            if status != "Ready":
+                availability = "❌ Unavailable"
+            elif gpu_free >= 8:
+                availability = "✅ Full node (8+ GPUs)"
+                total_nodes_available += 1
+            elif gpu_free > 0:
+                availability = f"⚠️  Partial ({gpu_free} GPUs)"
+            elif gpu_capacity != "0":
+                availability = "🔴 GPUs occupied"
+            else:
+                availability = "💻 CPU-only node"
+            
+            # Filter if only showing available
+            if only_available and status != "Ready":
+                continue
+            if only_available and gpu_capacity != "0" and gpu_free == 0:
+                continue
+                
+            summary_table.add_row(
+                node_name,
+                status,
+                gpu_info,
+                cpu_info,
+                memory_info,
+                availability
+            )
+        
+        console.print(summary_table)
+        
+        # Show summary stats
+        console.print(f"\n📊 **Summary:**")
+        console.print(f"• **Available full nodes** (8+ GPUs): {total_nodes_available}")
+        console.print(f"• **Total free GPUs**: {total_gpus_free}")
+        console.print(f"• **GPU nodes**: {len([n for n in gpu_nodes if n[2] > 0])}")
+        
+        # Show detailed GPU breakdown if requested
+        if detailed and gpu_nodes:
+            console.print(f"\n🎯 **GPU Availability Details:**")
+            gpu_table = Table(box=box.SIMPLE)
+            gpu_table.add_column("Node", style="cyan")
+            gpu_table.add_column("Free/Total GPUs", style="green") 
+            gpu_table.add_column("Status", style="yellow")
+            
+            for node_name, gpu_free, gpu_total, status in sorted(gpu_nodes, key=lambda x: x[1], reverse=True):
+                if only_available and gpu_free == 0:
+                    continue
+                gpu_table.add_row(node_name, f"{gpu_free}/{gpu_total}", status)
+            
+            console.print(gpu_table)
+        
+        return 0
+        
+    except subprocess.CalledProcessError as e:
+        console.print(f"❌ Failed to get cluster resources: {e}", style="red")
+        return 1
+    except Exception as e:
+        console.print(f"❌ Error processing cluster resources: {e}", style="red")
         return 1
 
 

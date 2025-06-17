@@ -9,12 +9,14 @@ from simple_parsing import field
 class TrainConfig:
     """Train a model with Axolotl"""
     config: str = field(positional=True, help="Path to the SFT config YAML file")
+    pull: bool = field(default=False, alias="--pull", help="Pull latest axolotl_dev code before training")
 
 
 @dataclass
 class GrpoConfig:
     """Train a model with GRPO (requires multi-service deployment)"""
     config: str = field(positional=True, help="Path to the GRPO config YAML file")
+    pull: bool = field(default=False, alias="--pull", help="Pull latest axolotl_dev code before training")
 
 
 @dataclass 
@@ -65,3 +67,10 @@ class PodsConfig:
 class InfoConfig:
     """Show cluster information and capabilities"""
     nodes: bool = field(default=False, alias="-n", help="Show detailed node information")
+
+
+@dataclass
+class ResourcesConfig:
+    """Show available cluster resources"""
+    detailed: bool = field(default=False, alias="-d", help="Show detailed resource breakdown per node")
+    only_available: bool = field(default=False, alias="-a", help="Only show nodes with available resources")

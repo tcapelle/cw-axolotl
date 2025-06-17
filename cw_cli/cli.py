@@ -6,11 +6,11 @@ from simple_parsing import ArgumentParser
 
 from .config import (
     TrainConfig, GrpoConfig, LogsConfig, StatusConfig, DeleteConfig, 
-    ListConfig, JobsConfig, PodsConfig, InfoConfig
+    ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig
 )
 from .commands import (
     train_command, grpo_command, logs_command, status_command, delete_command,
-    list_command, jobs_command, pods_command, info_command
+    list_command, jobs_command, pods_command, info_command, resources_command
 )
 
 
@@ -32,6 +32,9 @@ def main():
   cw jobs -A                                  List all jobs (all namespaces)
   cw pods -w -r                               Watch pods with resources
   cw nodes -n                                 Show detailed node info
+  cw resources                                Show available cluster resources
+  cw resources -d                             Show detailed GPU breakdown
+  cw resources -a                             Show only available nodes
   
   # Job management
   cw describe                                 Select job to check status
@@ -77,6 +80,10 @@ def main():
     nodes_parser = subparsers_dict.add_parser("nodes", help="List nodes")
     nodes_parser.add_arguments(InfoConfig, dest="info_config")
     nodes_parser.set_defaults(func=lambda args: info_command(args.info_config.nodes))
+    
+    resources_parser = subparsers_dict.add_parser("resources", help="Show available cluster resources")
+    resources_parser.add_arguments(ResourcesConfig, dest="resources_config")
+    resources_parser.set_defaults(func=lambda args: resources_command(args.resources_config.detailed, args.resources_config.only_available))
     
     # Job management
     logs_parser = subparsers_dict.add_parser("logs", help="View logs")

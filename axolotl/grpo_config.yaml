@@ -93,4 +93,4 @@ deepspeed: deepspeed_configs/zero2.json
 # New CW cluster resources
 gpu: 8
 cpu: "64"
-memory: "1200Gi"
+memory: "1500Gi"

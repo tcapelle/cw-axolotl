@@ -16,6 +16,17 @@ console = Console()
 def kubectl(*args, input_data: str = None, capture_output: bool = False) -> subprocess.CompletedProcess:
     """Helper function to run kubectl commands."""
     cmd = ["kubectl"] + list(args)
+    
+    # Print the command in dimmed grey
+    cmd_str = " ".join(cmd)
+    if input_data:
+        # Truncate long input data for display
+        input_preview = input_data[:100] + "..." if len(input_data) > 100 else input_data
+        input_preview = input_preview.replace('\n', ' ')
+        console.print(f"$ {cmd_str} <<< {input_preview}", style="dim white")
+    else:
+        console.print(f"$ {cmd_str}", style="dim white")
+    
     return subprocess.run(
         cmd,
         input=input_data,
@@ -40,7 +51,7 @@ def create_configmap_yaml(config_data: Dict[str, Any], configmap_name: str) -> s
     return yaml.dump(configmap, default_flow_style=False)
 
 
-def update_job_yaml_with_resources(job_yaml_path: Path, config_data: Dict[str, Any]) -> str:
+def update_job_yaml_with_resources(job_yaml_path: Path, config_data: Dict[str, Any], pull_latest: bool = False) -> str:
     """Update the job YAML with resource requirements from the config."""
     with open(job_yaml_path, 'r') as f:
         yaml_content = f.read()
@@ -71,6 +82,16 @@ def update_job_yaml_with_resources(job_yaml_path: Path, config_data: Dict[str, A
     if resources:
         container = job_data['spec']['template']['spec']['containers'][0]
         container['resources'] = resources
+    
+    # Add PULL_LATEST environment variable if requested
+    if pull_latest:
+        container = job_data['spec']['template']['spec']['containers'][0]
+        if 'env' not in container:
+            container['env'] = []
+        container['env'].append({
+            'name': 'PULL_LATEST',
+            'value': 'true'
+        })
     
     return yaml.dump(job_data, default_flow_style=False)
 
@@ -204,7 +225,7 @@ def create_status_layout(job_data: dict, pod_data: dict, job_name: str) -> Layou
     return layout
 
 
-def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]) -> str:
+def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any], pull_latest: bool = False) -> str:
     """Update GRPO YAML files with resource requirements from the config."""
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
@@ -230,19 +251,28 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
         }
     }
     
-    # Update resources in all container specs
+    # Update resources in all container specs and add PULL_LATEST env var if requested
     for doc in yaml_docs:
         if doc and doc.get('kind') in ['Deployment', 'Job']:
             containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
             for container in containers:
                 if 'resources' in container:
                     container['resources'] = resources
+                
+                # Add PULL_LATEST environment variable if requested
+                if pull_latest:
+                    if 'env' not in container:
+                        container['env'] = []
+                    container['env'].append({
+                        'name': 'PULL_LATEST',
+                        'value': 'true'
+                    })
     
     # Convert back to YAML string
     return '---\n'.join(yaml.dump(doc, default_flow_style=False) for doc in yaml_docs if doc)
 
 
-def deploy_grpo_services(config_data: Dict[str, Any]) -> bool:
+def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False) -> bool:
     """Deploy all GRPO services in the correct order."""
     grpo_dir = Path(__file__).parent / "kubeconfigs" / "grpo"
     
@@ -270,7 +300,7 @@ def deploy_grpo_services(config_data: Dict[str, Any]) -> bool:
             return False
         
         try:
-            updated_yaml = update_grpo_yaml_with_resources(yaml_path, config_data)
+            updated_yaml = update_grpo_yaml_with_resources(yaml_path, config_data, pull_latest)
             if not run_kubectl_command(updated_yaml):
                 console.print(f"❌ Failed to deploy {service_name}", style="red")
                 return False
