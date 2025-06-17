@@ -1,5 +1,7 @@
 # CW-Axolotl-CLI - Unified Axolotl Training CLI
 
+> Note: This is my own research CLI tool that leverages tcapelle/triton_eval repo. It is axolotl based but is using my own docker images and rewards functions. It would be easy to adapt to use generic axolotl training anyway.
+
 A Kubernetes-based command-line interface for managing machine learning training jobs, specifically designed for [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) fine-tuning workflows on GPU clusters.
 
 ## Features
