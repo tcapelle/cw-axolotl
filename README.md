@@ -1,4 +1,4 @@
-# CW-CLI - Unified Axolotl Training CLI
+# CW-Axolotl-CLI - Unified Axolotl Training CLI
 
 A Kubernetes-based command-line interface for managing machine learning training jobs, specifically designed for [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) fine-tuning workflows on GPU clusters.
 
