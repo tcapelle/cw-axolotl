@@ -60,7 +60,7 @@ pad_to_sequence_len: false
 wandb_project: axolotl-grpo
 wandb_entity: grpo-cuda
 wandb_name: grpo-qwen3-4b
-wandb_log_model: checkpoint
+wandb_log_model:
 
 gradient_accumulation_steps: 2
 micro_batch_size: 12  # should match num_generations / num_gpus
