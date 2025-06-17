@@ -94,8 +94,8 @@ spec:
             cpu: "64"
             memory: "2000Gi"
           requests:
-            cpu: "32"
-            memory: "1500Gi"
+            cpu: "64"
+            memory: "1800Gi"
             nvidia.com/gpu: "8"
       volumes:
         - name: model-checkpoints
