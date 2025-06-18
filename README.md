@@ -82,172 +82,19 @@ cw list
 ## Commands Reference
 
 ### Training Commands
+- `cw axolotl train <config> [--pull]` - Launch SFT training
+- `cw axolotl grpo <config> [--pull]` - Launch GRPO training (3 services)
 
-#### `cw axolotl train <config> [--pull]`
-Launch a Supervised Fine-Tuning job.
-
-```bash
-# Basic usage
-cw axolotl train my_config.yaml
-
-# With resource overrides
-cw axolotl train my_config.yaml --gpu 4 --cpu 32 --memory 500Gi
-
-# With training parameter overrides
-cw axolotl train my_config.yaml --learning_rate 2e-5 --batch_size 8
-
-# Pull latest axolotl_dev code before training
-cw axolotl train my_config.yaml --pull
-```
-
-#### `cw axolotl grpo <config> [--pull]`
-Launch a GRPO training job with VLLM server, rewards server, and training components.
-
-```bash
-# Basic GRPO training
-cw axolotl grpo grpo_config.yaml
-
-# With custom resources
-cw axolotl grpo grpo_config.yaml --gpu 8 --memory 1000Gi
-
-# Pull latest code for all services (training, vllm, rewards)
-cw axolotl grpo grpo_config.yaml --pull
-```
-
-**Note**: The `--pull` flag executes `git pull origin main` in `/app/axolotl_dev` before starting any services, ensuring you're using the latest code.
-
-### Monitoring Commands
-
-#### `cw jobs [-n <ns>] [-A|--all-namespaces]`
-List all jobs in the cluster.
-
-```bash
-# All jobs in default namespace
-cw jobs
-
-# Jobs in specific namespace
-cw jobs -n my-namespace
-
-# Jobs across all namespaces
-cw jobs -A
-```
-
-#### `cw pods [-w|--watch] [-n <ns>] [-A|--all-namespaces] [-r|--show-resources]`
-List all pods with resource information.
-
-```bash
-# List pods once
-cw pods
-
-# Watch pods in real-time (refreshes every 2 seconds)
-cw pods -w
-
-# Show resource requests/limits
-cw pods -r
-
-# Pods in specific namespace
-cw pods -n my-namespace
-
-# Pods across all namespaces
-cw pods -A
-
-# Watch pods with resources across all namespaces
-cw pods -w -r -A
-```
-
-#### `cw resources`
-Show available cluster resources (GPU, CPU, Memory) with detailed breakdown.
-
-```bash
-# Show cluster resources with detailed GPU breakdown
-cw resources
-```
-
-Example output:
-```
-🖥️ Cluster Resource Summary
-┌─────────┬──────────┬───────────┬────────────┬──────────┬─────────────────────────┐
-│ Node    │ Status   │ GPUs      │ CPU        │ Memory   │ Availability            │
-├─────────┼──────────┼───────────┼────────────┼──────────┼─────────────────────────┤
-│ g122466 │ Ready    │ 5/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (5 GPUs)   │
-│ gd8ff0c │ Ready    │ 6/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (6 GPUs)   │
-│ gd96896 │ Ready    │ 6/8 free  │ 128.0 cores│ 2062Gi   │ ⚠️  Partial (6 GPUs)   │
-│ gf43324 │ Ready    │ 8/8 free  │ 128.0 cores│ 2062Gi   │ ✅ Full node (8+ GPUs) │
-└─────────┴──────────┴───────────┴────────────┴──────────┴─────────────────────────┘
-
-📊 Summary:
-• Available full nodes (8+ GPUs): 1
-• Total free GPUs: 25
-• GPU nodes: 15
-```
-
-#### `cw nodes [-n|--nodes]`
-Show cluster information and node details.
-
-```bash
-# Basic cluster overview
-cw nodes
-
-# Detailed node information
-cw nodes -n
-```
+### Monitoring Commands  
+- `cw resources` - Show cluster resources and GPU availability
+- `cw jobs [-A]` - List jobs (use `-A` for all namespaces)
+- `cw pods [-w] [-r] [-A]` - List pods (use `-w` to watch, `-r` for resources)
+- `cw nodes [-n]` - Show cluster nodes (use `-n` for details)
 
 ### Management Commands
-
-#### `cw describe [job] [-w|--watch] [-o <format>]`
-Check detailed job status.
-
-```bash
-# Interactive job selection
-cw describe
-
-# Specific job
-cw describe my-training-job
-
-# Watch job status in real-time
-cw describe my-training-job -w
-
-# Output in different formats
-cw describe my-training-job -o yaml
-cw describe my-training-job -o json
-```
-
-#### `cw logs [-j <job>] [-n|--no-follow]`
-View job logs.
-
-```bash
-# Interactive job selection (follows by default)
-cw logs
-
-# Specific job (follows by default)
-cw logs -j my-training-job
-
-# Show logs once without following
-cw logs -j my-training-job -n
-```
-
-#### `cw delete [job] [--force]`
-Delete jobs and associated resources.
-
-```bash
-# Interactive job selection
-cw delete
-
-# Specific job
-cw delete my-training-job
-
-# Force delete any CW resources (jobs, deployments, services)
-cw delete --force
-```
-
-**Note**: The `--force` flag allows you to select and delete any CW-prefixed resources, including stuck deployments or services that weren't properly cleaned up.
-
-#### `cw list`
-List only CW-managed jobs (legacy command).
-
-```bash
-cw list
-```
+- `cw logs [-j <job>] [-n]` - View logs (interactive selection or specific job)
+- `cw describe [job] [-w] [-o <format>]` - Check job status
+- `cw delete [job] [--force]` - Delete jobs (use `--force` for stuck resources)
 
 ## Configuration
 
@@ -313,148 +160,30 @@ cw axolotl train config.yaml \
   --gradient_accumulation_steps 16
 ```
 
-## Examples
-
-### Example 1: Basic SFT Training
+## Usage Examples
 
 ```bash
-# Launch training job
+# Basic SFT training
 cw axolotl train axolotl/sft_config.yaml
 
-# Monitor progress
-cw pods -w
-
-# View logs
-cw logs  # Interactive selection, follows by default
-
-# Check detailed status
-cw describe
-```
-
-### Example 2: Resource-Intensive Training
-
-```bash
-# Launch with specific resources
-cw axolotl train large_model_config.yaml \
-  --gpu 8 \
-  --cpu 128 \
-  --memory 2000Gi \
-  --learning_rate 1e-5
-
-# Monitor cluster utilization
-cw nodes
-cw jobs
-```
-
-### Example 3: GRPO Training Workflow
-
-```bash
-# Launch GRPO training (creates 3 services)
+# GRPO training with 3 services
 cw axolotl grpo axolotl/grpo_config.yaml
 
-# Monitor all components
-cw pods -w
+# Override resources
+cw axolotl train config.yaml --gpu 8 --memory 1200Gi
 
-# Check logs for each component
-cw jobs  # See all 3 services
-cw logs -j grpo-training-job
-cw logs -j grpo-vllm-server
-cw logs -j grpo-rewards-server
+# Pull latest code before training
+cw axolotl train config.yaml --pull
 
-# Cleanup when done
-cw delete grpo-training-job  # Cleans up all related resources
-```
-
-### Example 4: Development Workflow
-
-```bash
-# Quick experimentation with parameter sweeps
-cw axolotl train base_config.yaml --learning_rate 1e-5 --run_name exp1
-cw axolotl train base_config.yaml --learning_rate 2e-5 --run_name exp2
-cw axolotl train base_config.yaml --learning_rate 5e-5 --run_name exp3
-
-# Monitor all experiments
-cw jobs
-cw pods
-
-# Compare logs
-cw logs -j exp1
-cw logs -j exp2
-cw logs -j exp3
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Job fails to start**: Check that required secrets exist and cluster has available resources
-2. **Out of memory**: Reduce `micro_batch_size` or increase `gradient_accumulation_steps`
-3. **GPU allocation fails**: Verify GPU availability with `cw nodes`
-4. **Logs not showing**: Wait for pod to be ready, or check pod status with `cw pods`
-
-### Debug Commands
-
-```bash
-# Check available cluster resources
+# Monitor cluster resources
 cw resources
 
-# Check detailed resource breakdown
-cw resources -d
+# Follow specific job logs
+cw logs -j my-training-job
 
-# Check cluster nodes
-cw nodes
-
-# Check all pods status
-cw pods
-
-# Check specific job details
-cw describe my-job
-
-# Check job logs
-cw logs -j my-job
-
-# Force cleanup stuck resources
+# Clean up resources
 cw delete --force
 ```
-
-### Resource Planning
-
-Before launching training jobs, use `cw resources` to check availability:
-
-```bash
-# Check cluster resources and availability
-cw resources
-```
-
-This helps you:
-- See which nodes have enough free GPUs for your job
-- Check available memory and CPU capacity
-- Identify nodes that might be unavailable due to scheduling issues
-- Plan resource allocation for multiple concurrent jobs
-
-## Development
-
-### Project Structure
-
-```
-cw_cli/
-├── cli.py          # Main CLI interface
-├── commands.py     # Command implementations
-├── cluster.py      # Cluster information and node management
-├── pods.py         # Pod listing and monitoring
-├── config.py       # Configuration management
-├── utils.py        # Utility functions
-├── display.py      # Output formatting and display
-└── kubeconfigs/    # Kubernetes deployment templates
-```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with your Kubernetes cluster
-5. Submit a pull request
 
 ## License
 
