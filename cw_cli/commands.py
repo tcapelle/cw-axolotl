@@ -217,19 +217,18 @@ def train_command(train_config) -> int:
     
     console.print("🎉 SFT job submitted successfully!", style="green bold")
     
-    # Show logs command
+    # Automatically follow logs
     job_name = "cw-axolotl-train-sft"
-    console.print(f"\n💡 To monitor logs: [cyan]cw logs -j {job_name}[/]")
+    console.print(f"\n🔄 Following logs for {job_name}... (Press Ctrl+C to stop)")
     
-    # Ask to follow logs
     try:
-        follow = console.input("\n[bold cyan]Follow logs now? (y/N):[/] ").strip().lower()
-        if follow in ['y', 'yes']:
-            _follow_job_logs(job_name)
+        _follow_job_logs(job_name)
     except KeyboardInterrupt:
         console.print("\n⏹️ Log following stopped.", style="yellow")
+        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
     except Exception as e:
         console.print(f"❌ Could not follow logs: {e}", style="red")
+        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
     
     return 0
 
@@ -279,20 +278,19 @@ def grpo_command(grpo_config) -> int:
     
     console.print("🎉 GRPO training started successfully!", style="green bold")
     
-    # Show monitoring commands
+    # Automatically follow training logs
     job_name = "cw-axolotl-train-grpo"
-    console.print(f"\n💡 Monitor with: [cyan]cw logs -j {job_name}[/]")
-    console.print(f"💡 Check services: [cyan]cw pods -A[/]")
+    console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
+    console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
     
-    # Ask to follow logs
     try:
-        follow = console.input("\n[bold cyan]Follow training logs now? (y/N):[/] ").strip().lower()
-        if follow in ['y', 'yes']:
-            _follow_job_logs(job_name)
+        _follow_job_logs(job_name)
     except KeyboardInterrupt:
         console.print("\n⏹️ Log following stopped.", style="yellow")
+        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
     except Exception as e:
         console.print(f"❌ Could not follow logs: {e}", style="red")
+        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
     
     return 0
 
@@ -347,12 +345,12 @@ def status_command(job: str, watch: bool = False, output: str = "table") -> int:
         return 1
 
 
-def resources_command(detailed: bool = False, only_available: bool = False) -> int:
+def resources_command() -> int:
     """Show available cluster resources (CPU, Memory, GPU)."""
     try:
         from rich.table import Table
         from rich import box
-        import json
+        import concurrent.futures
         
         # Get nodes data
         result = kubectl("get", "nodes", "-o", "json", capture_output=True)
@@ -371,6 +369,38 @@ def resources_command(detailed: bool = False, only_available: bool = False) -> i
         total_nodes_available = 0
         gpu_nodes = []
         
+        # Helper function to get node describe data
+        def get_node_describe_data(node_name):
+            try:
+                describe_result = kubectl("describe", "node", node_name, capture_output=True)
+                return node_name, describe_result.stdout
+            except Exception as e:
+                return node_name, None
+        
+        # Get all GPU-enabled nodes for parallel describe calls
+        gpu_node_names = []
+        node_info_map = {}
+        
+        for node in nodes_data.get("items", []):
+            node_name = node["metadata"]["name"]
+            node_info_map[node_name] = node
+            
+            capacity = node.get("status", {}).get("capacity", {})
+            gpu_capacity = capacity.get("nvidia.com/gpu", "0")
+            if gpu_capacity != "0" and gpu_capacity is not None:
+                gpu_node_names.append(node_name)
+        
+        # Run kubectl describe in parallel for all GPU nodes
+        describe_results = {}
+        if gpu_node_names:
+            console.print(f"🔍 Checking {len(gpu_node_names)} GPU nodes in parallel...", style="dim")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(gpu_node_names))) as executor:
+                future_to_node = {executor.submit(get_node_describe_data, node_name): node_name for node_name in gpu_node_names}
+                for future in concurrent.futures.as_completed(future_to_node):
+                    node_name, describe_text = future.result()
+                    describe_results[node_name] = describe_text
+        
+        # Process all nodes with the describe data
         for node in nodes_data.get("items", []):
             node_name = node["metadata"]["name"]
             
@@ -400,11 +430,9 @@ def resources_command(detailed: bool = False, only_available: bool = False) -> i
                 gpu_info = "No GPUs"
                 gpu_free = 0
             else:
-                # Get GPU allocation from describe (we need current usage)
-                try:
-                    describe_result = kubectl("describe", "node", node_name, capture_output=True)
-                    describe_text = describe_result.stdout
-                    
+                # Use pre-fetched describe data
+                describe_text = describe_results.get(node_name)
+                if describe_text:
                     # Extract GPU usage from describe output
                     gpu_used = 0
                     for line in describe_text.split('\n'):
@@ -425,8 +453,7 @@ def resources_command(detailed: bool = False, only_available: bool = False) -> i
                         gpu_nodes.append((node_name, gpu_free, gpu_total, status))
                         if status == "Ready":
                             total_gpus_free += gpu_free
-                    
-                except:
+                else:
                     gpu_info = f"?/{gpu_capacity}"
                     gpu_free = 0
             
@@ -461,12 +488,6 @@ def resources_command(detailed: bool = False, only_available: bool = False) -> i
             else:
                 availability = "💻 CPU-only node"
             
-            # Filter if only showing available
-            if only_available and status != "Ready":
-                continue
-            if only_available and gpu_capacity != "0" and gpu_free == 0:
-                continue
-                
             summary_table.add_row(
                 node_name,
                 status,
@@ -484,17 +505,16 @@ def resources_command(detailed: bool = False, only_available: bool = False) -> i
         console.print(f"• **Total free GPUs**: {total_gpus_free}")
         console.print(f"• **GPU nodes**: {len([n for n in gpu_nodes if n[2] > 0])}")
         
-        # Show detailed GPU breakdown if requested
-        if detailed and gpu_nodes:
+        # Always show detailed GPU breakdown
+        if gpu_nodes:
             console.print(f"\n🎯 **GPU Availability Details:**")
             gpu_table = Table(box=box.SIMPLE)
             gpu_table.add_column("Node", style="cyan")
             gpu_table.add_column("Free/Total GPUs", style="green") 
             gpu_table.add_column("Status", style="yellow")
             
+            # Sort by available GPUs (most available first)
             for node_name, gpu_free, gpu_total, status in sorted(gpu_nodes, key=lambda x: x[1], reverse=True):
-                if only_available and gpu_free == 0:
-                    continue
                 gpu_table.add_row(node_name, f"{gpu_free}/{gpu_total}", status)
             
             console.print(gpu_table)

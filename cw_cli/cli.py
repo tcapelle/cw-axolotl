@@ -83,7 +83,7 @@ def main():
     
     resources_parser = subparsers_dict.add_parser("resources", help="Show available cluster resources")
     resources_parser.add_arguments(ResourcesConfig, dest="resources_config")
-    resources_parser.set_defaults(func=lambda args: resources_command(args.resources_config.detailed, args.resources_config.only_available))
+    resources_parser.set_defaults(func=lambda args: resources_command())
     
     # Job management
     logs_parser = subparsers_dict.add_parser("logs", help="View logs")

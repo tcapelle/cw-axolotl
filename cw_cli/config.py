@@ -72,5 +72,4 @@ class InfoConfig:
 @dataclass
 class ResourcesConfig:
     """Show available cluster resources"""
-    detailed: bool = field(default=False, alias="-d", help="Show detailed resource breakdown per node")
-    only_available: bool = field(default=False, alias="-a", help="Only show nodes with available resources")
+    pass

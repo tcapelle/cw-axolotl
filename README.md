@@ -155,21 +155,12 @@ cw pods -A
 cw pods -w -r -A
 ```
 
-#### `cw resources [-d|--detailed] [-a|--only-available]`
-Show available cluster resources (GPU, CPU, Memory).
+#### `cw resources`
+Show available cluster resources (GPU, CPU, Memory) with detailed breakdown.
 
 ```bash
-# Basic resource overview
+# Show cluster resources with detailed GPU breakdown
 cw resources
-
-# Detailed GPU breakdown per node
-cw resources -d
-
-# Show only nodes with available resources
-cw resources -a
-
-# Combine flags for detailed view of available nodes only
-cw resources -d -a
 ```
 
 Example output:
@@ -431,11 +422,8 @@ cw delete --force
 Before launching training jobs, use `cw resources` to check availability:
 
 ```bash
-# Quick resource check
+# Check cluster resources and availability
 cw resources
-
-# Detailed view for resource planning
-cw resources -d -a
 ```
 
 This helps you:
