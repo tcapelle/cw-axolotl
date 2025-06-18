@@ -23,10 +23,10 @@ def main():
         description="CW CLI - Kubernetes job management for ML training",
         epilog="""Examples:
   # Training
-  cw axolotl train axolotl/sft_config.yaml             Train a model
-  cw axolotl train config.yaml --gpu 6                 Override GPU count
-  cw axolotl train config.yaml --gpu 4 --batch_size 8  Override multiple params
-  cw axolotl grpo axolotl/grpo_config.yaml             Train with GRPO (3-service deployment)
+  cw axolotl sft axolotl/sft_config.yaml              Train a model with SFT
+  cw axolotl sft config.yaml --gpu 6                  Override GPU count
+  cw axolotl sft config.yaml --gpu 4 --batch_size 8   Override multiple params
+  cw axolotl grpo axolotl/grpo_config.yaml            Train with GRPO (3-service deployment)
   
   # Resource monitoring  
   cw jobs -A                                  List all jobs (all namespaces)
@@ -60,9 +60,9 @@ def main():
     axolotl_parser = subparsers_dict.add_parser("axolotl", help="Train models")
     axolotl_subparsers = axolotl_parser.add_subparsers()
     
-    train_parser = axolotl_subparsers.add_parser("train", help="Train a model")
-    train_parser.add_arguments(TrainConfig, dest="train_config")
-    train_parser.set_defaults(func=lambda args: train_command(args.train_config))
+    sft_parser = axolotl_subparsers.add_parser("sft", help="Train a model with SFT")
+    sft_parser.add_arguments(TrainConfig, dest="train_config")
+    sft_parser.set_defaults(func=lambda args: train_command(args.train_config))
     
     grpo_parser = axolotl_subparsers.add_parser("grpo", help="Train a model with GRPO")
     grpo_parser.add_arguments(GrpoConfig, dest="grpo_config")

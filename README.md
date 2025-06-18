@@ -35,13 +35,13 @@ pip install -e .
 
 ```bash
 # Basic SFT training
-cw axolotl train axolotl/sft_config.yaml
+cw axolotl sft axolotl/sft_config.yaml
 
 # GRPO training with multi-service deployment
 cw axolotl grpo axolotl/grpo_config.yaml
 
 # Override parameters from command line
-cw axolotl train config.yaml --learning_rate 1e-5 --gpu 8 --memory 1000Gi
+cw axolotl sft config.yaml --learning_rate 1e-5 --gpu 8 --memory 1000Gi
 ```
 
 ### 2. Monitor Your Jobs
@@ -82,7 +82,7 @@ cw list
 ## Commands Reference
 
 ### Training Commands
-- `cw axolotl train <config> [--pull]` - Launch SFT training
+- `cw axolotl sft <config> [--pull]` - Launch SFT training
 - `cw axolotl grpo <config> [--pull]` - Launch GRPO training (3 services)
 
 ### Monitoring Commands  
@@ -142,19 +142,19 @@ Any parameter in your config can be overridden from the command line:
 
 ```bash
 # Override training parameters
-cw axolotl train config.yaml \
+cw axolotl sft config.yaml \
   --learning_rate 1e-5 \
   --num_epochs 5 \
   --micro_batch_size 2
 
 # Override resource requirements
-cw axolotl train config.yaml \
+cw axolotl sft config.yaml \
   --gpu 8 \
   --cpu 64 \
   --memory 1000Gi
 
 # Mix training and resource overrides
-cw axolotl train config.yaml \
+cw axolotl sft config.yaml \
   --learning_rate 3e-5 \
   --gpu 2 \
   --gradient_accumulation_steps 16
@@ -164,16 +164,16 @@ cw axolotl train config.yaml \
 
 ```bash
 # Basic SFT training
-cw axolotl train axolotl/sft_config.yaml
+cw axolotl sft axolotl/sft_config.yaml
 
 # GRPO training with 3 services
 cw axolotl grpo axolotl/grpo_config.yaml
 
 # Override resources
-cw axolotl train config.yaml --gpu 8 --memory 1200Gi
+cw axolotl sft config.yaml --gpu 8 --memory 1200Gi
 
 # Pull latest code before training
-cw axolotl train config.yaml --pull
+cw axolotl sft config.yaml --pull
 
 # Monitor cluster resources
 cw resources
