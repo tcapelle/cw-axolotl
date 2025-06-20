@@ -1,3 +1,6 @@
+# Container image for this training run
+image: "ghcr.io/tcapelle/triton_eval:1906"
+
 base_model: /model-checkpoints/sft-qwen4b-boot/
 # base_model: /workspace/data/axolotl-artifacts/grpo-beta-zero
 # Automatically upload checkpoint and final model to HF

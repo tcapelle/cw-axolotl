@@ -196,7 +196,7 @@ def train_command(train_config) -> int:
     configmap_yaml = create_configmap_yaml(config_data, configmap_name)
     
     # Load and update job YAML
-    job_yaml_path = Path(__file__).parent / "kubeconfigs" / "sft_job.yaml"
+    job_yaml_path = Path(__file__).parent / "kubeconfigs" / "axolotl" / "sft_job.yaml"
     try:
         job_yaml = update_job_yaml_with_resources(job_yaml_path, config_data, train_config.pull)
     except Exception as e:
@@ -529,6 +529,149 @@ def resources_command() -> int:
         return 1
 
 
+def grpo_restart_command(service: str) -> int:
+    """Restart GRPO services (vllm or rewards)."""
+    try:
+        # Validate service parameter
+        if service.lower() not in ['vllm', 'rewards']:
+            console.print(f"❌ Error: Service must be 'vllm' or 'rewards', got '{service}'", style="red")
+            return 1
+        
+        service_name = service.lower()
+        
+        # Map service names to deployment names
+        if service_name == 'vllm':
+            deployment_names = ['cw-axolotl-vllm-deployment', 'cw-vllm-deployment']
+            service_names = ['cw-axolotl-vllm-service', 'cw-vllm-service']
+            display_name = "VLLM"
+        else:  # rewards
+            deployment_names = ['cw-axolotl-rewards-server-grpo', 'cw-rewards-server-grpo', 'cw-rewards-deployment']
+            service_names = ['cw-axolotl-rewards-service-grpo', 'cw-rewards-service-grpo', 'cw-rewards-service']
+            display_name = "Rewards"
+        
+        console.print(f"🔄 Restarting {display_name} service...", style="blue")
+        
+        # Find and restart the deployment
+        deployment_found = False
+        for deployment_name in deployment_names:
+            try:
+                # Check if deployment exists
+                kubectl("get", "deployment", deployment_name, capture_output=True)
+                
+                # Restart the deployment using rollout restart
+                kubectl("rollout", "restart", "deployment", deployment_name)
+                console.print(f"✅ {display_name} deployment [{deployment_name}] restart initiated", style="green")
+                deployment_found = True
+                break
+                
+            except subprocess.CalledProcessError:
+                # This deployment doesn't exist, try the next one
+                continue
+        
+        if not deployment_found:
+            console.print(f"❌ No {display_name} deployment found. Available deployments:", style="red")
+            try:
+                result = kubectl("get", "deployments", "-o", "name", capture_output=True)
+                deployments = [dep.replace('deployment/', '') for dep in result.stdout.split('\n') if dep.strip()]
+                cw_deployments = [dep for dep in deployments if dep.startswith('cw-')]
+                if cw_deployments:
+                    console.print(f"CW deployments: {', '.join(cw_deployments)}", style="yellow")
+                else:
+                    console.print("No CW deployments found", style="yellow")
+            except subprocess.CalledProcessError:
+                console.print("Could not list deployments", style="yellow")
+            return 1
+        
+        # Wait a moment and show status
+        console.print("⏳ Waiting for rollout to start...", style="yellow")
+        time.sleep(3)
+        
+        # Show rollout status
+        for deployment_name in deployment_names:
+            try:
+                kubectl("get", "deployment", deployment_name, capture_output=True)
+                console.print(f"📊 Rollout status for {deployment_name}:", style="blue")
+                kubectl("rollout", "status", "deployment", deployment_name)
+                break
+            except subprocess.CalledProcessError:
+                continue
+        
+        console.print(f"🎉 {display_name} service restart completed!", style="green bold")
+        console.print(f"💡 Check status with: [cyan]cw pods -A | grep {service_name}[/]", style="dim")
+        
+        return 0
+        
+    except subprocess.CalledProcessError as e:
+        console.print(f"❌ Failed to restart {service} service: {e}", style="red")
+        return 1
+    except Exception as e:
+        console.print(f"❌ Error restarting {service} service: {e}", style="red")
+        return 1
+
+
+def gpu_command(job: str = "", interval: int = 2) -> int:
+    """Watch GPU usage on training nodes using nvidia-smi."""
+    try:
+        # If no job specified, prompt user to select
+        if not job:
+            available_jobs = _get_available_jobs()
+            job = _prompt_job_selection(available_jobs, "watch GPU usage for")
+            if not job:
+                return 1
+        
+        # Safety check: only allow watching jobs with cw- prefix
+        if not job.startswith('cw-'):
+            console.print(f"❌ Error: This CLI can only watch jobs with 'cw-' prefix. '{job}' is not a CW-managed job.", style="red")
+            return 1
+        
+        # Find the pod(s) for this job
+        console.print(f"🔍 Finding pods for job {job}...", style="blue")
+        result = kubectl("get", "pods", "-l", f"job-name={job}", "-o", "json", capture_output=True)
+        pods_data = yaml.safe_load(result.stdout)
+        
+        if not pods_data.get('items'):
+            console.print(f"❌ No pods found for job {job}", style="red")
+            console.print("💡 Make sure the job is running and try: [cyan]cw jobs[/]", style="dim")
+            return 1
+        
+        # Get the first running pod
+        running_pod = None
+        for pod in pods_data['items']:
+            if pod.get('status', {}).get('phase') == 'Running':
+                running_pod = pod
+                break
+        
+        if not running_pod:
+            console.print(f"❌ No running pods found for job {job}", style="red")
+            console.print("💡 Check pod status with: [cyan]cw pods[/]", style="dim")
+            return 1
+        
+        pod_name = running_pod['metadata']['name']
+        node_name = running_pod['spec'].get('nodeName', 'unknown')
+        
+        console.print(f"🎯 Found running pod: [cyan]{pod_name}[/] on node [yellow]{node_name}[/]")
+        console.print(f"🔄 Starting nvidia-smi watch (interval: {interval}s)...")
+        console.print("💡 Press Ctrl+C to stop", style="dim")
+        
+        # Execute watch nvidia-smi in the pod
+        # Use kubectl exec to run watch nvidia-smi inside the container
+        watch_cmd = f"watch -n {interval} nvidia-smi"
+        kubectl("exec", "-it", pod_name, "--", "bash", "-c", watch_cmd)
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        console.print("\n⏹️ GPU monitoring stopped.", style="yellow")
+        return 0
+    except subprocess.CalledProcessError as e:
+        console.print(f"❌ Failed to watch GPU usage: {e}", style="red")
+        console.print("💡 Make sure the pod has nvidia-smi available", style="dim")
+        return 1
+    except Exception as e:
+        console.print(f"❌ Error watching GPU usage: {e}", style="red")
+        return 1
+
+
 def _force_delete_resources() -> int:
     """Force delete any CW resources (jobs, deployments, services)."""
     from rich.prompt import Prompt
@@ -626,19 +769,14 @@ def _force_delete_resources() -> int:
     return 0
 
 
-def delete_command(job: str, force: bool = False) -> int:
+def delete_command(job: str) -> int:
     """Delete job and associated resources."""
     try:
-        # If force flag is used, show all CW resources for selection
-        if force:
+        # If no specific job is provided, show all CW resources for selection (force behavior by default)
+        if not job:
             return _force_delete_resources()
         
-        # If no job specified, prompt user to select
-        if not job:
-            available_jobs = _get_available_jobs()
-            job = _prompt_job_selection(available_jobs, "delete")
-            if not job:
-                return 1
+        # If a specific job is provided, proceed with standard job deletion
         
         # Safety check: only allow deleting jobs with cw- prefix
         if not job.startswith('cw-'):

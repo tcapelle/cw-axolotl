@@ -5,12 +5,12 @@ import sys
 from simple_parsing import ArgumentParser
 
 from .config import (
-    TrainConfig, GrpoConfig, LogsConfig, StatusConfig, DeleteConfig, 
-    ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig
+    TrainConfig, GrpoConfig, GrpoRestartConfig, LogsConfig, StatusConfig, DeleteConfig, 
+    ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig, GpuConfig
 )
 from .commands import (
-    train_command, grpo_command, logs_command, status_command, delete_command,
-    list_command, jobs_command, pods_command, info_command, resources_command
+    train_command, grpo_command, grpo_restart_command, logs_command, status_command, delete_command,
+    list_command, jobs_command, pods_command, info_command, resources_command, gpu_command
 )
 
 
@@ -26,15 +26,19 @@ def main():
   cw axolotl sft axolotl/sft_config.yaml              Train a model with SFT
   cw axolotl sft config.yaml --gpu 6                  Override GPU count
   cw axolotl sft config.yaml --gpu 4 --batch_size 8   Override multiple params
-  cw axolotl grpo axolotl/grpo_config.yaml            Train with GRPO (3-service deployment)
+  cw axolotl grpo train axolotl/grpo_config.yaml      Train with GRPO (3-service deployment)
+  
+  # GRPO service management
+  cw axolotl grpo restart vllm                Restart VLLM service
+  cw axolotl grpo restart rewards             Restart rewards service
   
   # Resource monitoring  
   cw jobs -A                                  List all jobs (all namespaces)
   cw pods -w -r                               Watch pods with resources
   cw nodes -n                                 Show detailed node info
   cw resources                                Show available cluster resources
-  cw resources -d                             Show detailed GPU breakdown
-  cw resources -a                             Show only available nodes
+  cw gpu                                      Watch nvidia-smi on training node
+  cw gpu my-job -i 5                          Watch specific job's GPU every 5s
   
   # Job management
   cw describe                                 Select job to check status
@@ -64,9 +68,18 @@ def main():
     sft_parser.add_arguments(TrainConfig, dest="train_config")
     sft_parser.set_defaults(func=lambda args: train_command(args.train_config))
     
-    grpo_parser = axolotl_subparsers.add_parser("grpo", help="Train a model with GRPO")
-    grpo_parser.add_arguments(GrpoConfig, dest="grpo_config")
-    grpo_parser.set_defaults(func=lambda args: grpo_command(args.grpo_config))
+    axolotl_grpo_parser = axolotl_subparsers.add_parser("grpo", help="GRPO training and management")
+    axolotl_grpo_subparsers = axolotl_grpo_parser.add_subparsers()
+    
+    # GRPO training subcommand
+    grpo_train_parser = axolotl_grpo_subparsers.add_parser("train", help="Train a model with GRPO")
+    grpo_train_parser.add_arguments(GrpoConfig, dest="grpo_config")
+    grpo_train_parser.set_defaults(func=lambda args: grpo_command(args.grpo_config))
+    
+    # GRPO restart subcommand
+    grpo_restart_parser = axolotl_grpo_subparsers.add_parser("restart", help="Restart GRPO services")
+    grpo_restart_parser.add_arguments(GrpoRestartConfig, dest="grpo_restart_config")
+    grpo_restart_parser.set_defaults(func=lambda args: grpo_restart_command(args.grpo_restart_config.service))
     
     # Resource listing
     jobs_parser = subparsers_dict.add_parser("jobs", help="List jobs")
@@ -85,6 +98,10 @@ def main():
     resources_parser.add_arguments(ResourcesConfig, dest="resources_config")
     resources_parser.set_defaults(func=lambda args: resources_command())
     
+    gpu_parser = subparsers_dict.add_parser("gpu", help="Watch GPU usage on training nodes")
+    gpu_parser.add_arguments(GpuConfig, dest="gpu_config")
+    gpu_parser.set_defaults(func=lambda args: gpu_command(args.gpu_config.job, args.gpu_config.interval))
+    
     # Job management
     logs_parser = subparsers_dict.add_parser("logs", help="View logs")
     logs_parser.add_arguments(LogsConfig, dest="logs_config")
@@ -96,7 +113,7 @@ def main():
     
     delete_parser = subparsers_dict.add_parser("delete", help="Delete job")
     delete_parser.add_arguments(DeleteConfig, dest="delete_config")
-    delete_parser.set_defaults(func=lambda args: delete_command(args.delete_config.job, args.delete_config.force))
+    delete_parser.set_defaults(func=lambda args: delete_command(args.delete_config.job))
     
     # Legacy
     list_parser = subparsers_dict.add_parser("list", help="List axolotl jobs")

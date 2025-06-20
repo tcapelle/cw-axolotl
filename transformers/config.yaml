@@ -1,0 +1,2 @@
+# PLACEHOLDER: Framework-specific images will be specified in training configs
+# When implementing Transformers support, add 'image:' field to training configs

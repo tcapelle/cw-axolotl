@@ -2,7 +2,7 @@
 
 > Note: This is my own research CLI tool that leverages tcapelle/triton_eval repo. It is axolotl based but is using my own docker images and rewards functions. It would be easy to adapt to use generic axolotl training anyway.
 
-A Kubernetes-based command-line interface for managing machine learning training jobs, specifically designed for [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) fine-tuning workflows on GPU clusters.
+A Kubernetes-based command-line interface for managing machine learning training jobs, with primary support for [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) fine-tuning workflows and a flexible framework system for adding other training backends.
 
 ## Features
 
@@ -14,6 +14,7 @@ A Kubernetes-based command-line interface for managing machine learning training
 - ⚡ **Development-Friendly**: Command-line parameter overrides and latest code pulling
 - 📈 **Resource Planning**: Check available cluster capacity before launching jobs
 - 🧹 **Smart Cleanup**: Automatic log saving and force cleanup for stuck resources
+- 🔧 **Multi-Framework Ready**: Framework-specific configurations for different training backends
 
 ## Installation
 
@@ -83,10 +84,13 @@ cw list
 
 ### Training Commands
 - `cw axolotl sft <config> [--pull]` - Launch SFT training
-- `cw axolotl grpo <config> [--pull]` - Launch GRPO training (3 services)
+- `cw axolotl grpo train <config> [--pull]` - Launch GRPO training (3 services)
+- `cw axolotl grpo restart vllm` - Restart VLLM inference service
+- `cw axolotl grpo restart rewards` - Restart rewards server service
 
 ### Monitoring Commands  
 - `cw resources` - Show cluster resources and GPU availability
+- `cw gpu [job] [-i interval]` - Watch nvidia-smi on training node
 - `cw jobs [-A]` - List jobs (use `-A` for all namespaces)
 - `cw pods [-w] [-r] [-A]` - List pods (use `-w` to watch, `-r` for resources)
 - `cw nodes [-n]` - Show cluster nodes (use `-n` for details)
@@ -94,7 +98,7 @@ cw list
 ### Management Commands
 - `cw logs [-j <job>] [-n]` - View logs (interactive selection or specific job)
 - `cw describe [job] [-w] [-o <format>]` - Check job status
-- `cw delete [job] [--force]` - Delete jobs (use `--force` for stuck resources)
+- `cw delete [job]` - Delete jobs (shows all CW resources for selection if no job specified)
 
 ## Configuration
 
@@ -103,6 +107,9 @@ cw list
 Your Axolotl config files can include standard parameters plus optional resource specifications:
 
 ```yaml
+# Container image (extracted for Kubernetes, removed before axolotl)
+image: "ghcr.io/tcapelle/triton_eval:1906"
+
 # Standard Axolotl configuration
 base_model: Qwen/Qwen2.5-7B-Instruct
 model_type: AutoModelForCausalLM
@@ -167,7 +174,11 @@ cw axolotl sft config.yaml \
 cw axolotl sft axolotl/sft_config.yaml
 
 # GRPO training with 3 services
-cw axolotl grpo axolotl/grpo_config.yaml
+cw axolotl grpo train axolotl/grpo_config.yaml
+
+# Restart GRPO services
+cw axolotl grpo restart vllm
+cw axolotl grpo restart rewards
 
 # Override resources
 cw axolotl sft config.yaml --gpu 8 --memory 1200Gi
@@ -181,8 +192,8 @@ cw resources
 # Follow specific job logs
 cw logs -j my-training-job
 
-# Clean up resources
-cw delete --force
+# Clean up resources (shows all CW resources for selection)
+cw delete
 ```
 
 ## License

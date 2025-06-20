@@ -38,6 +38,14 @@ def kubectl(*args, input_data: str = None, capture_output: bool = False) -> subp
 
 def create_configmap_yaml(config_data: Dict[str, Any], configmap_name: str) -> str:
     """Create a ConfigMap YAML string from the config data."""
+    # Remove cluster-specific fields that shouldn't be passed to axolotl
+    clean_config = config_data.copy()
+    
+    # Remove fields that are used for cluster deployment but not axolotl training
+    cluster_fields = ['image', 'gpu', 'cpu', 'memory', 'resources']
+    for field in cluster_fields:
+        clean_config.pop(field, None)
+    
     configmap = {
         'apiVersion': 'v1',
         'kind': 'ConfigMap',
@@ -45,7 +53,7 @@ def create_configmap_yaml(config_data: Dict[str, Any], configmap_name: str) -> s
             'name': configmap_name
         },
         'data': {
-            'config.yaml': yaml.dump(config_data, default_flow_style=False)
+            'config.yaml': yaml.dump(clean_config, default_flow_style=False)
         }
     }
     return yaml.dump(configmap, default_flow_style=False)
@@ -56,11 +64,13 @@ def update_job_yaml_with_resources(job_yaml_path: Path, config_data: Dict[str, A
     with open(job_yaml_path, 'r') as f:
         yaml_content = f.read()
     
-    # Substitute the default image
-    yaml_content = substitute_image_in_yaml(yaml_content)
-    
-    # Parse the updated YAML
+    # Parse the YAML first
     job_data = yaml.safe_load(yaml_content)
+    
+    # Extract and apply container image from config
+    if 'image' in config_data:
+        container = job_data['spec']['template']['spec']['containers'][0]
+        container['image'] = config_data['image']
     
     # Extract resource requirements from config if they exist
     resources = {}
@@ -230,9 +240,6 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
     
-    # Substitute the default image
-    yaml_content = substitute_image_in_yaml(yaml_content)
-    
     # Split multi-document YAML if needed
     yaml_docs = list(yaml.safe_load_all(yaml_content))
     
@@ -251,11 +258,16 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
         }
     }
     
-    # Update resources in all container specs and add PULL_LATEST env var if requested
+    # Update resources and image in all container specs
     for doc in yaml_docs:
         if doc and doc.get('kind') in ['Deployment', 'Job']:
             containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
             for container in containers:
+                # Apply image from config if specified
+                if 'image' in config_data:
+                    container['image'] = config_data['image']
+                
+                # Apply resources
                 if 'resources' in container:
                     container['resources'] = resources
                 
@@ -274,7 +286,7 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
 
 def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False) -> bool:
     """Deploy all GRPO services in the correct order."""
-    grpo_dir = Path(__file__).parent / "kubeconfigs" / "grpo"
+    grpo_dir = Path(__file__).parent / "kubeconfigs" / "axolotl" / "grpo"
     
     # Create ConfigMap for GRPO config
     configmap_name = "cw-axolotl-train-grpo-config"
@@ -350,26 +362,5 @@ def cleanup_grpo_services() -> bool:
 
 
 def get_default_image() -> str:
-    """Get the default container image from config."""
-    try:
-        config_path = Path(__file__).parent / "config" / "default_image.yaml"
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-            return config.get('default_image', 'ghcr.io/tcapelle/triton_eval:1506')
-    except Exception:
-        return 'ghcr.io/tcapelle/triton_eval:1506'
-
-
-def substitute_image_in_yaml(yaml_content: str, image: str = None) -> str:
-    """Replace placeholder images in YAML content."""
-    if image is None:
-        image = get_default_image()
-    
-    # Replace common image patterns
-    yaml_content = yaml_content.replace('ghcr.io/tcapelle/triton_eval:1306', image)
-    yaml_content = yaml_content.replace('ghcr.io/tcapelle/triton_eval:1506', image)
-    
-    # Also replace any ${DEFAULT_IMAGE} placeholders if we add them later
-    yaml_content = yaml_content.replace('${DEFAULT_IMAGE}', image)
-    
-    return yaml_content
+    """Get the default container image (fallback)."""
+    return 'ghcr.io/tcapelle/triton_eval:1906'

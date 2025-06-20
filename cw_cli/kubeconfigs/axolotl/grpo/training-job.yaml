@@ -58,9 +58,16 @@ spec:
             LOG_FILE="${LOGS_DIR}/grpo_training_${TIMESTAMP}.log"
             
             echo "Saving logs to: ${LOG_FILE}"
+
+            # trl
+            pip install "trl==0.18.2" --no-deps
+            
+            # # upgrade deepspeed
+            # pip install "deepspeed==0.17.1"
             
             # Run axolotl and tee output to both stdout and log file
             axolotl train /mnt/axolotl-config/config.yaml 2>&1 | tee "${LOG_FILE}"
+
         env:
         - name: WANDB_API_KEY
           valueFrom:
@@ -104,7 +111,7 @@ spec:
         - name: dshm
           emptyDir:
             medium: Memory
-            sizeLimit: 500Gi # Adjust size as needed
+            sizeLimit: 200Gi # Adjust size as needed
         - name: config-volume
           configMap:
             name: cw-axolotl-train-grpo-config

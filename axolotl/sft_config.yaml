@@ -1,3 +1,6 @@
+# Container image for this training run
+image: "ghcr.io/tcapelle/triton_eval:1906"
+
 base_model: Qwen/Qwen3-32B
 
 plugins:

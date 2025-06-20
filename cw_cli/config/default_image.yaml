@@ -1,2 +1,0 @@
-# Default container image for all CW Axolotl components
-default_image: "ghcr.io/tcapelle/triton_eval:1506"
