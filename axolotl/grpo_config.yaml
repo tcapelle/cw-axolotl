@@ -1,6 +1,11 @@
 # Container image for this training run
 image: "ghcr.io/tcapelle/triton_eval:1906"
 
+# New CW cluster resources
+gpu: 8
+cpu: "64"
+memory: "1500Gi"
+
 base_model: /model-checkpoints/sft-qwen4b-boot/
 # base_model: /workspace/data/axolotl-artifacts/grpo-beta-zero
 # Automatically upload checkpoint and final model to HF
@@ -92,8 +97,3 @@ save_only_model: true
 
 gc_steps: 1
 deepspeed: deepspeed_configs/zero2.json
-
-# New CW cluster resources
-gpu: 8
-cpu: "64"
-memory: "1500Gi"

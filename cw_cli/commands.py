@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 
-from .utils import console, kubectl, create_configmap_yaml, update_job_yaml_with_resources, run_kubectl_command, deploy_grpo_services, cleanup_grpo_services
+from .utils import console, kubectl, create_configmap_yaml, update_job_yaml_with_resources, run_kubectl_command, deploy_grpo_services, deploy_verifiers_services, cleanup_grpo_services
 from .display import create_table, create_summary, get_age_string, get_pod_status_emoji, get_job_status_emoji
 
 
@@ -295,9 +295,68 @@ def grpo_command(grpo_config) -> int:
     return 0
 
 
-def logs_command(job: str, no_follow: bool = False) -> int:
+def verifiers_grpo_command(verifiers_config) -> int:
+    """Train a model with Verifiers GRPO (multi-service deployment)."""
+    import sys
+    
+    config_path = Path(verifiers_config.config)
+    
+    if not config_path.exists():
+        console.print(f"❌ Error: Config file {config_path} not found", style="red")
+        return 1
+    
+    # Load the Verifiers config
+    try:
+        with open(config_path, 'r') as f:
+            config_data = yaml.safe_load(f)
+    except Exception as e:
+        console.print(f"❌ Error reading config file: {e}", style="red")
+        return 1
+    
+    # Parse and apply command line overrides
+    try:
+        config_idx = sys.argv.index(str(config_path))
+        override_args = sys.argv[config_idx + 1:]
+    except ValueError:
+        try:
+            config_idx = sys.argv.index(config_path.name)
+            override_args = sys.argv[config_idx + 1:]
+        except ValueError:
+            override_args = []
+    
+    overrides = parse_overrides(override_args)
+    if overrides:
+        config_data = apply_overrides(config_data, overrides)
+    
+    # Deploy Verifiers services
+    console.print("🚀 Deploying Verifiers GRPO services...", style="blue")
+    if not deploy_verifiers_services(config_data, verifiers_config.pull):
+        return 1
+    
+    console.print("🎉 Verifiers GRPO training started successfully!", style="green bold")
+    
+    # Automatically follow training logs
+    job_name = "cw-verifiers-train-grpo"
+    console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
+    console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
+    
+    try:
+        _follow_job_logs(job_name)
+    except KeyboardInterrupt:
+        console.print("\n⏹️ Log following stopped.", style="yellow")
+        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
+    except Exception as e:
+        console.print(f"❌ Could not follow logs: {e}", style="red")
+        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
+    
+    return 0
+
+
+def logs_command(logs_config) -> int:
     """View job logs."""
     try:
+        job = logs_config.job
+        
         # If no job specified, prompt user to select
         if not job:
             available_jobs = _get_available_jobs()
@@ -310,10 +369,24 @@ def logs_command(job: str, no_follow: bool = False) -> int:
             console.print(f"❌ Error: This CLI can only view logs for jobs with 'cw-' prefix. '{job}' is not a CW-managed job.", style="red")
             return 1
         
-        if no_follow:
-            kubectl("logs", f"job/{job}")
+        # Build kubectl logs command with options
+        if logs_config.no_follow:
+            cmd_args = ["logs", f"job/{job}"]
+            
+            if logs_config.tail > 0:
+                cmd_args.extend(["--tail", str(logs_config.tail)])
+            
+            if logs_config.previous:
+                cmd_args.append("--previous")
+            
+            kubectl(*cmd_args)
         else:
-            _follow_job_logs(job)
+            # Use enhanced follow mode with tail if specified
+            if logs_config.tail > 0:
+                console.print(f"📡 Showing last {logs_config.tail} lines, then following...", style="blue")
+                kubectl("logs", f"job/{job}", "--tail", str(logs_config.tail), "-f")
+            else:
+                _follow_job_logs(job)
         return 0
     except subprocess.CalledProcessError as e:
         console.print(f"❌ Failed to get logs: {e}", style="red")

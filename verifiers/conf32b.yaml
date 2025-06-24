@@ -1,0 +1,62 @@
+# Container image for this training run
+image: "ghcr.io/tcapelle/triton_eval:1906"
+
+# GRPO Training Configuration
+seed: 42
+
+model_name_or_path: "/model-checkpoints/sft-qwen3-32b-boot"
+dataset_name: "tcapelle/boostrap_oai_pt_think"
+field_messages: "prompt"
+
+wandb_entity: "grpo-cuda"
+wandb_project: "verifiers"
+wandb_name: "qwen-32b-vf"
+
+output_dir: "/model-checkpoints/"
+
+bf16: True
+
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 2
+num_generations: 8
+num_train_epochs: 1
+max_prompt_length: 4000  # Remove length limit
+max_completion_length: 8000
+beta: 0.0
+temperature: 0.6
+async_generation_timeout: 400.0
+num_iterations: 1
+
+learning_rate: 1e-6
+max_grad_norm: 1e-2
+lr_scheduler_type: "constant_with_warmup"
+warmup_steps: 10
+gradient_checkpointing: True
+
+save_strategy: "steps"
+save_steps: 500
+save_only_model: True
+
+logging_steps: 1
+log_on_each_node: False
+log_completions: True
+saves_per_epoch: 1
+save_total_limit: 2
+
+###############################################################
+## rewards server
+triton_server_url: "http://cw-verifiers-rewards-service-grpo:9347"
+
+###############################################################
+## vllm config
+vllm_server_host: "cw-verifiers-vllm-service"
+vllm_server_port: 8000
+
+# Memory and performance settings
+gpu-memory-utilization: 0.9  # Ratio of GPU memory to reserve (0-1)
+max-model-len: 12000         # Maximum model sequence length
+
+# Batching and request handling
+max-batch-size: 1024                  # Max requests per LLM batch
+batch-request-timeout-seconds: 300    # Request timeout in seconds
+token-chunk-size: 4096                  # Tokens per chunk in dynamic batching

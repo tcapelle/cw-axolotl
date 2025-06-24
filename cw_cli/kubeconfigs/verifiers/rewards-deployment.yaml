@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cw-verifiers-rewards-server-grpo
+  labels:
+    app: verifiers-rewards
+    task: rewards # Task label for anti-affinity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifiers-rewards
+  template:
+    metadata:
+      labels:
+        app: verifiers-rewards # Pods get this label
+        task: rewards        # And this task label
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: task # Avoid pods with these task labels
+                operator: In
+                values:
+                - serving
+                - training  
+            topologyKey: "kubernetes.io/hostname"
+      # imagePullSecrets: ...
+      containers:
+      - name: verifiers-rewards-container
+        image: ghcr.io/tcapelle/triton_eval:1906 # <-- UPDATE THIS
+        workingDir: /app/
+        command: ["sh"]
+        args:
+          - "-c"
+          - |
+            # Pull latest `triton_eval` if requested
+            if [ "${PULL_LATEST:-false}" = "true" ]; then
+              echo "🔄 Pulling latest `triton_eval` code..."
+              cd /app/ && git pull origin main
+              echo "✅ Code updated successfully"
+            fi
+            
+            # Run rewards server
+            python sandbox/server.py
+        env:
+          - name: TASK_TIMEOUT_SECONDS
+            value: "30"
+          - name: WORKER_JOIN_TIMEOUT
+            value: "20"
+          - name: CONCURRENCY_PER_GPU
+            value: "2"
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+            cpu: "64"
+            memory: "1500Gi"
+          requests:
+            cpu: "32"
+            memory: "1000Gi"
+            nvidia.com/gpu: "6"
+        ports:
+        # README mentioned ssh -L 9347:localhost:9347 for rewards server
+        - containerPort: 9347
+          name: http-rewards
+      # tolerations: ...
+      # nodeSelector: ... 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cw-verifiers-rewards-service-grpo
+spec:
+  selector:
+    app: verifiers-rewards # Matches the labels of the pods in your Deployment
+  ports:
+    - protocol: TCP
+      port: 9347 # Port on which the service is exposed
+      targetPort: 9347 # Port on the pod to forward traffic to (containerPort)
+  type: ClusterIP 

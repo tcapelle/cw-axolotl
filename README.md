@@ -2,7 +2,7 @@
 
 > Note: This is my own research CLI tool that leverages tcapelle/triton_eval repo. It is axolotl based but is using my own docker images and rewards functions. It would be easy to adapt to use generic axolotl training anyway.
 
-A Kubernetes-based command-line interface for managing machine learning training jobs, with primary support for [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) fine-tuning workflows and a flexible framework system for adding other training backends.
+A Kubernetes-based command-line interface for managing machine learning training jobs, supporting multiple training frameworks including [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl) and Verifiers with a flexible system for adding other training backends.
 
 ## Features
 
@@ -87,6 +87,7 @@ cw list
 - `cw axolotl grpo train <config> [--pull]` - Launch GRPO training (3 services)
 - `cw axolotl grpo restart vllm` - Restart VLLM inference service
 - `cw axolotl grpo restart rewards` - Restart rewards server service
+- `cw verifiers grpo <config> [--pull]` - Launch Verifiers GRPO training (3 services)
 
 ### Monitoring Commands  
 - `cw resources` - Show cluster resources and GPU availability
@@ -175,6 +176,9 @@ cw axolotl sft axolotl/sft_config.yaml
 
 # GRPO training with 3 services
 cw axolotl grpo train axolotl/grpo_config.yaml
+
+# Verifiers GRPO training
+cw verifiers grpo verifiers/conf.yaml
 
 # Restart GRPO services
 cw axolotl grpo restart vllm

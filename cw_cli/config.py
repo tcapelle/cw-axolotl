@@ -25,11 +25,20 @@ class GrpoRestartConfig:
     service: str = field(positional=True, help="Service to restart: 'vllm' or 'rewards'")
 
 
+@dataclass
+class VerifiersConfig:
+    """Train a model with Verifiers GRPO (requires multi-service deployment)"""
+    config: str = field(positional=True, help="Path to the Verifiers config YAML file")
+    pull: bool = field(default=False, alias="--pull", help="Pull latest verifiers code before training")
+
+
 @dataclass 
 class LogsConfig:
     """View job logs"""
     job: str = field(default="", alias="-j", help="Job name (optional)")
     no_follow: bool = field(default=False, alias="-n", help="Don't follow logs")
+    tail: int = field(default=0, alias="--tail", help="Number of recent lines to show (0 = all)")
+    previous: bool = field(default=False, alias="-p", help="Show logs from previous container instance")
 
 
 @dataclass

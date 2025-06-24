@@ -1,9 +1,0 @@
-# This file has been moved to axolotl/sft_job.yaml
-# The new directory structure organizes configs by framework:
-# - axolotl/sft_job.yaml (SFT training)
-# - axolotl/grpo/ (GRPO training configs)
-# - transformers/ (future HuggingFace configs)
-# - torchtune/ (future PyTorch Tune configs)
-
-# Please update any external references to use the new path:
-# axolotl/sft_job.yaml

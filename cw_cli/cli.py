@@ -5,11 +5,11 @@ import sys
 from simple_parsing import ArgumentParser
 
 from .config import (
-    TrainConfig, GrpoConfig, GrpoRestartConfig, LogsConfig, StatusConfig, DeleteConfig, 
+    TrainConfig, GrpoConfig, GrpoRestartConfig, VerifiersConfig, LogsConfig, StatusConfig, DeleteConfig, 
     ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig, GpuConfig
 )
 from .commands import (
-    train_command, grpo_command, grpo_restart_command, logs_command, status_command, delete_command,
+    train_command, grpo_command, grpo_restart_command, verifiers_grpo_command, logs_command, status_command, delete_command,
     list_command, jobs_command, pods_command, info_command, resources_command, gpu_command
 )
 
@@ -27,6 +27,7 @@ def main():
   cw axolotl sft config.yaml --gpu 6                  Override GPU count
   cw axolotl sft config.yaml --gpu 4 --batch_size 8   Override multiple params
   cw axolotl grpo train axolotl/grpo_config.yaml      Train with GRPO (3-service deployment)
+  cw verifiers grpo verifiers/conf.yaml               Train with Verifiers GRPO
   
   # GRPO service management
   cw axolotl grpo restart vllm                Restart VLLM service
@@ -81,6 +82,14 @@ def main():
     grpo_restart_parser.add_arguments(GrpoRestartConfig, dest="grpo_restart_config")
     grpo_restart_parser.set_defaults(func=lambda args: grpo_restart_command(args.grpo_restart_config.service))
     
+    # Verifiers training commands
+    verifiers_parser = subparsers_dict.add_parser("verifiers", help="Verifiers training framework")
+    verifiers_subparsers = verifiers_parser.add_subparsers()
+    
+    verifiers_grpo_parser = verifiers_subparsers.add_parser("grpo", help="Train with Verifiers GRPO")
+    verifiers_grpo_parser.add_arguments(VerifiersConfig, dest="verifiers_config")
+    verifiers_grpo_parser.set_defaults(func=lambda args: verifiers_grpo_command(args.verifiers_config))
+    
     # Resource listing
     jobs_parser = subparsers_dict.add_parser("jobs", help="List jobs")
     jobs_parser.add_arguments(JobsConfig, dest="jobs_config")
@@ -105,7 +114,7 @@ def main():
     # Job management
     logs_parser = subparsers_dict.add_parser("logs", help="View logs")
     logs_parser.add_arguments(LogsConfig, dest="logs_config")
-    logs_parser.set_defaults(func=lambda args: logs_command(args.logs_config.job, args.logs_config.no_follow))
+    logs_parser.set_defaults(func=lambda args: logs_command(args.logs_config))
     
     describe_parser = subparsers_dict.add_parser("describe", help="Describe job")
     describe_parser.add_arguments(StatusConfig, dest="status_config")

@@ -331,6 +331,53 @@ def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False)
     return True
 
 
+def deploy_verifiers_services(config_data: Dict[str, Any], pull_latest: bool = False) -> bool:
+    """Deploy all Verifiers GRPO services in the correct order."""
+    verifiers_dir = Path(__file__).parent / "kubeconfigs" / "verifiers"
+    
+    # Create ConfigMap for Verifiers config
+    configmap_name = "cw-verifiers-train-grpo-config"
+    console.print("📝 Creating Verifiers ConfigMap...", style="blue")
+    configmap_yaml = create_configmap_yaml(config_data, configmap_name)
+    
+    if not run_kubectl_command(configmap_yaml):
+        return False
+    
+    # Deploy services in order: VLLM, Rewards, Training
+    services = [
+        ("Verifiers VLLM Server", "vllm-deployment.yaml"),
+        ("Verifiers Rewards Server", "rewards-deployment.yaml"),
+        ("Verifiers Training Job", "training-job.yaml")
+    ]
+    
+    for service_name, yaml_file in services:
+        console.print(f"🚀 Deploying {service_name}...", style="blue")
+        
+        yaml_path = verifiers_dir / yaml_file
+        if not yaml_path.exists():
+            console.print(f"❌ Error: {yaml_path} not found", style="red")
+            return False
+        
+        try:
+            updated_yaml = update_grpo_yaml_with_resources(yaml_path, config_data, pull_latest)
+            if not run_kubectl_command(updated_yaml):
+                console.print(f"❌ Failed to deploy {service_name}", style="red")
+                return False
+            
+            console.print(f"✅ {service_name} deployed successfully", style="green")
+            
+            # Add delay between services to ensure proper startup order
+            if service_name != "Verifiers Training Job":
+                console.print("⏳ Waiting for service to initialize...", style="yellow")
+                time.sleep(10)
+                
+        except Exception as e:
+            console.print(f"❌ Error deploying {service_name}: {e}", style="red")
+            return False
+    
+    return True
+
+
 def cleanup_grpo_services() -> bool:
     """Clean up all GRPO services (deployments and services)."""
     success = True

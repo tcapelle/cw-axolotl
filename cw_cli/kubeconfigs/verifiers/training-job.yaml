@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: cw-axolotl-train-grpo # Consider generateName for multiple runs: cw-axolotl-training-job-
+  name: cw-verifiers-train-grpo # Consider generateName for multiple runs: cw-verifiers-training-job-
   labels:
-    app: axolotl-train
+    app: verifiers-train
     task: training # Task label for anti-affinity
 spec:
   ttlSecondsAfterFinished: 0              # ← delete Job immediately after it finishes
@@ -11,7 +11,7 @@ spec:
   template:
     metadata:
       labels:
-        app: axolotl-train # Pods get this label
+        app: verifiers-train # Pods get this label
         task: training     # And this task label
     spec:
       affinity:
@@ -28,28 +28,28 @@ spec:
       initContainers:
       - name: wait-for-vllm
         image: busybox:1.28 # Or any small image with nc/curl
-        command: ['sh', '-c', 'until nc -zv cw-axolotl-vllm-service 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
+        command: ['sh', '-c', 'until nc -zv cw-verifiers-vllm-service 8000; do echo "Waiting for VLLM service..."; sleep 5; done']
       - name: wait-for-rewards
         image: busybox:1.28 # Or any small image with nc/curl
-        command: ['sh', '-c', 'until nc -zv cw-axolotl-rewards-service-grpo 9347; do echo "Waiting for rewards service..."; sleep 5; done']
+        command: ['sh', '-c', 'until nc -zv cw-verifiers-rewards-service-grpo 9347; do echo "Waiting for rewards service..."; sleep 5; done']
       # imagePullSecrets: ...
       containers:
-      - name: axolotl-train-container
-        image: ghcr.io/tcapelle/triton_eval:1506 # <-- UPDATE THIS
-        workingDir: /app/axolotl_dev
+      - name: verifiers-train-container
+        image: ghcr.io/tcapelle/triton_eval:1906 # <-- UPDATE THIS
+        workingDir: /app/
         command: ["sh"]
         args:
           - "-c"
           - |
-            # Pull latest axolotl_dev if requested
+            # Pull latest if requested
             if [ "${PULL_LATEST:-false}" = "true" ]; then
-              echo "🔄 Pulling latest axolotl_dev code..."
-              cd /app/axolotl_dev && git pull origin main
+              echo "🔄 Pulling latest `triton_eval` code..."
+              cd /app/ && git pull origin main
               echo "✅ Code updated successfully"
             fi
             
             # Create logs directory based on output_dir from config
-            OUTPUT_DIR=$(grep "^output_dir:" /mnt/axolotl-config/config.yaml | cut -d' ' -f2)
+            OUTPUT_DIR=$(grep "^output_dir:" /mnt/verifiers-config/config.yaml | cut -d' ' -f2)
             LOGS_DIR="${OUTPUT_DIR}/logs"
             mkdir -p "${LOGS_DIR}"
             
@@ -58,9 +58,12 @@ spec:
             LOG_FILE="${LOGS_DIR}/grpo_training_${TIMESTAMP}.log"
             
             echo "Saving logs to: ${LOG_FILE}"
-            
-            # Run axolotl and tee output to both stdout and log file
-            axolotl train /mnt/axolotl-config/config.yaml 2>&1 | tee "${LOG_FILE}"
+
+            # trl
+            pip install git+https://github.com/tcapelle/verifiers.git@weave
+
+            # train
+            accelerate launch --config_file=accelerate_configs/zero3.yaml verifiers_dev/grpo_train.py --config /mnt/verifiers-config/config.yaml 2>&1 | tee "${LOG_FILE}"
 
         env:
         - name: WANDB_API_KEY
@@ -69,7 +72,7 @@ spec:
               name: wandb-api-key-secret # Name of the secret you created
               key: WANDB_API_KEY        # Key within the secret
         - name: TRITON_SERVER_URL
-          value: "http://cw-axolotl-rewards-service-grpo:9347"
+          value: "http://cw-verifiers-rewards-service-grpo:9347"
         - name: WEAVE_PRINT_CALL_LINK
           value: "0"
         - name: TOKENIZERS_PARALLELISM
@@ -86,7 +89,7 @@ spec:
           - mountPath: /dev/shm
             name: dshm
           - name: config-volume
-            mountPath: /mnt/axolotl-config
+            mountPath: /mnt/verifiers-config
           - mountPath: /model-checkpoints
             name: model-checkpoints
         resources:
@@ -108,7 +111,7 @@ spec:
             sizeLimit: 200Gi # Adjust size as needed
         - name: config-volume
           configMap:
-            name: cw-axolotl-train-grpo-config
+            name: cw-verifiers-train-grpo-config
       restartPolicy: OnFailure
       # tolerations: ...
       # nodeSelector: ...
