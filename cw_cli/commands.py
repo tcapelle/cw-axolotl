@@ -5,12 +5,10 @@ import subprocess
 import yaml
 import time
 import json
-from pathlib import Path
 from typing import Dict, Any, List
-from datetime import datetime, timezone
 
-from .utils import console, kubectl, create_configmap_yaml, update_job_yaml_with_resources, run_kubectl_command, deploy_grpo_services, deploy_verifiers_services, cleanup_grpo_services
-from .display import create_table, create_summary, get_age_string, get_pod_status_emoji, get_job_status_emoji
+from .utils import console, kubectl, cleanup_grpo_services
+from .display import create_table, create_summary, get_age_string, get_job_status_emoji
 
 
 def _get_available_jobs() -> List[str]:
@@ -155,217 +153,62 @@ def apply_overrides(config_data: Dict[str, Any], overrides: Dict[str, Any]) -> D
 
 
 def train_command(train_config) -> int:
-    """Train a model with Axolotl."""
-    import sys
+    """Train a model with Axolotl using new architecture."""
+    from .core.commands import train_sft_command
+    from .core.exceptions import format_error_for_user, get_error_suggestions
     
-    config_path = Path(train_config.config)
-    
-    if not config_path.exists():
-        console.print(f"❌ Error: Config file {config_path} not found", style="red")
-        return 1
-    
-    # Load the SFT config
     try:
-        with open(config_path, 'r') as f:
-            config_data = yaml.safe_load(f)
+        return train_sft_command(
+            framework_name="axolotl",
+            config_path=train_config.config,
+            pull_latest=train_config.pull
+        )
     except Exception as e:
-        console.print(f"❌ Error reading config file: {e}", style="red")
+        console.print(format_error_for_user(e), style="red")
+        suggestion = get_error_suggestions(e)
+        if suggestion:
+            console.print(suggestion, style="yellow")
         return 1
-    
-    # Parse and apply command line overrides
-    # Find where config file is in argv and get args after it
-    try:
-        config_idx = sys.argv.index(str(config_path))
-        override_args = sys.argv[config_idx + 1:]
-    except ValueError:
-        # Try with just filename
-        try:
-            config_idx = sys.argv.index(config_path.name)
-            override_args = sys.argv[config_idx + 1:]
-        except ValueError:
-            override_args = []
-    
-    overrides = parse_overrides(override_args)
-    if overrides:
-        config_data = apply_overrides(config_data, overrides)
-    
-    # Generate unique names for this run
-    configmap_name = "cw-axolotl-train-sft-config"
-    
-    # Create ConfigMap YAML
-    configmap_yaml = create_configmap_yaml(config_data, configmap_name)
-    
-    # Load and update job YAML
-    job_yaml_path = Path(__file__).parent / "kubeconfigs" / "axolotl" / "sft_job.yaml"
-    try:
-        job_yaml = update_job_yaml_with_resources(job_yaml_path, config_data, train_config.pull)
-    except Exception as e:
-        console.print(f"❌ Error processing job YAML: {e}", style="red")
-        return 1
-    
-    # Apply ConfigMap first
-    console.print("📝 Creating ConfigMap...", style="blue")
-    if not run_kubectl_command(configmap_yaml):
-        return 1
-    
-    # Apply Job
-    console.print("🚀 Creating Job...", style="blue")
-    if not run_kubectl_command(job_yaml):
-        console.print("❌ Job creation failed, cleaning up ConfigMap...", style="yellow")
-        run_kubectl_command(configmap_yaml, apply=False)
-        return 1
-    
-    console.print("🎉 SFT job submitted successfully!", style="green bold")
-    
-    # Automatically follow logs
-    job_name = "cw-axolotl-train-sft"
-    console.print(f"\n🔄 Following logs for {job_name}... (Press Ctrl+C to stop)")
-    
-    try:
-        _follow_job_logs(job_name)
-    except KeyboardInterrupt:
-        console.print("\n⏹️ Log following stopped.", style="yellow")
-        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
-    except Exception as e:
-        console.print(f"❌ Could not follow logs: {e}", style="red")
-        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
-    
-    return 0
 
 
 def grpo_command(grpo_config) -> int:
-    """Train a model with GRPO (multi-service deployment)."""
-    import sys
+    """Train a model with GRPO using new architecture."""
+    from .core.commands import train_grpo_command
+    from .core.exceptions import format_error_for_user, get_error_suggestions
     
-    config_path = Path(grpo_config.config)
-    
-    if not config_path.exists():
-        console.print(f"❌ Error: Config file {config_path} not found", style="red")
-        return 1
-    
-    # Load the GRPO config
     try:
-        with open(config_path, 'r') as f:
-            config_data = yaml.safe_load(f)
+        return train_grpo_command(
+            framework_name="axolotl",
+            config_path=grpo_config.config,
+            pull_latest=grpo_config.pull,
+            services_only=grpo_config.services
+        )
     except Exception as e:
-        console.print(f"❌ Error reading config file: {e}", style="red")
+        console.print(format_error_for_user(e), style="red")
+        suggestion = get_error_suggestions(e)
+        if suggestion:
+            console.print(suggestion, style="yellow")
         return 1
-    
-    # Parse and apply command line overrides
-    try:
-        config_idx = sys.argv.index(str(config_path))
-        override_args = sys.argv[config_idx + 1:]
-    except ValueError:
-        try:
-            config_idx = sys.argv.index(config_path.name)
-            override_args = sys.argv[config_idx + 1:]
-        except ValueError:
-            override_args = []
-    
-    overrides = parse_overrides(override_args)
-    if overrides:
-        config_data = apply_overrides(config_data, overrides)
-    
-    # Validate GRPO config (skip validation for services-only mode)
-    if not grpo_config.services and config_data.get('rl') != 'grpo':
-        console.print("❌ Error: Config must have 'rl: grpo' for GRPO training", style="red")
-        return 1
-    
-    # Deploy GRPO services
-    if grpo_config.services:
-        console.print("🚀 Deploying GRPO services only (VLLM + Rewards)...", style="blue")
-        if not deploy_grpo_services(config_data, grpo_config.pull, services_only=True):
-            return 1
-        console.print("🎉 GRPO services deployed successfully!", style="green bold")
-        console.print("💡 Check services: [cyan]cw pods[/]")
-        return 0
-    else:
-        console.print("🚀 Deploying GRPO services...", style="blue")
-        if not deploy_grpo_services(config_data, grpo_config.pull):
-            return 1
-        
-        console.print("🎉 GRPO training started successfully!", style="green bold")
-        
-        # Automatically follow training logs
-        job_name = "cw-axolotl-train-grpo"
-        console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
-        console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
-        
-        try:
-            _follow_job_logs(job_name)
-        except KeyboardInterrupt:
-            console.print("\n⏹️ Log following stopped.", style="yellow")
-            console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
-        except Exception as e:
-            console.print(f"❌ Could not follow logs: {e}", style="red")
-            console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
-        
-        return 0
 
 
 def verifiers_grpo_command(verifiers_config) -> int:
-    """Train a model with Verifiers GRPO (multi-service deployment)."""
-    import sys
+    """Train a model with Verifiers GRPO using new architecture."""
+    from .core.commands import train_grpo_command
+    from .core.exceptions import format_error_for_user, get_error_suggestions
     
-    config_path = Path(verifiers_config.config)
-    
-    if not config_path.exists():
-        console.print(f"❌ Error: Config file {config_path} not found", style="red")
-        return 1
-    
-    # Load the Verifiers config
     try:
-        with open(config_path, 'r') as f:
-            config_data = yaml.safe_load(f)
+        return train_grpo_command(
+            framework_name="verifiers",
+            config_path=verifiers_config.config,
+            pull_latest=verifiers_config.pull,
+            services_only=verifiers_config.services
+        )
     except Exception as e:
-        console.print(f"❌ Error reading config file: {e}", style="red")
+        console.print(format_error_for_user(e), style="red")
+        suggestion = get_error_suggestions(e)
+        if suggestion:
+            console.print(suggestion, style="yellow")
         return 1
-    
-    # Parse and apply command line overrides
-    try:
-        config_idx = sys.argv.index(str(config_path))
-        override_args = sys.argv[config_idx + 1:]
-    except ValueError:
-        try:
-            config_idx = sys.argv.index(config_path.name)
-            override_args = sys.argv[config_idx + 1:]
-        except ValueError:
-            override_args = []
-    
-    overrides = parse_overrides(override_args)
-    if overrides:
-        config_data = apply_overrides(config_data, overrides)
-    
-    # Deploy Verifiers services
-    if verifiers_config.services:
-        console.print("🚀 Deploying Verifiers services only (VLLM + Rewards)...", style="blue")
-        if not deploy_verifiers_services(config_data, verifiers_config.pull, services_only=True):
-            return 1
-        console.print("🎉 Verifiers services deployed successfully!", style="green bold")
-        console.print("💡 Check services: [cyan]cw pods[/]")
-        return 0
-    else:
-        console.print("🚀 Deploying Verifiers GRPO services...", style="blue")
-        if not deploy_verifiers_services(config_data, verifiers_config.pull):
-            return 1
-        
-        console.print("🎉 Verifiers GRPO training started successfully!", style="green bold")
-        
-        # Automatically follow training logs
-        job_name = "cw-verifiers-train-grpo"
-        console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
-        console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
-        
-        try:
-            _follow_job_logs(job_name)
-        except KeyboardInterrupt:
-            console.print("\n⏹️ Log following stopped.", style="yellow")
-            console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
-        except Exception as e:
-            console.print(f"❌ Could not follow logs: {e}", style="red")
-            console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
-        
-        return 0
 
 
 def logs_command(logs_config) -> int:
@@ -619,82 +462,20 @@ def resources_command() -> int:
 
 
 def grpo_restart_command(service: str) -> int:
-    """Restart GRPO services (vllm or rewards)."""
+    """Restart GRPO services using new architecture."""
+    from .core.commands import restart_grpo_service_command
+    from .core.exceptions import format_error_for_user, get_error_suggestions
+    
     try:
-        # Validate service parameter
-        if service.lower() not in ['vllm', 'rewards']:
-            console.print(f"❌ Error: Service must be 'vllm' or 'rewards', got '{service}'", style="red")
-            return 1
-        
-        service_name = service.lower()
-        
-        # Map service names to deployment names
-        if service_name == 'vllm':
-            deployment_names = ['cw-axolotl-vllm-deployment', 'cw-vllm-deployment']
-            service_names = ['cw-axolotl-vllm-service', 'cw-vllm-service']
-            display_name = "VLLM"
-        else:  # rewards
-            deployment_names = ['cw-axolotl-rewards-server-grpo', 'cw-rewards-server-grpo', 'cw-rewards-deployment']
-            service_names = ['cw-axolotl-rewards-service-grpo', 'cw-rewards-service-grpo', 'cw-rewards-service']
-            display_name = "Rewards"
-        
-        console.print(f"🔄 Restarting {display_name} service...", style="blue")
-        
-        # Find and restart the deployment
-        deployment_found = False
-        for deployment_name in deployment_names:
-            try:
-                # Check if deployment exists
-                kubectl("get", "deployment", deployment_name, capture_output=True)
-                
-                # Restart the deployment using rollout restart
-                kubectl("rollout", "restart", "deployment", deployment_name)
-                console.print(f"✅ {display_name} deployment [{deployment_name}] restart initiated", style="green")
-                deployment_found = True
-                break
-                
-            except subprocess.CalledProcessError:
-                # This deployment doesn't exist, try the next one
-                continue
-        
-        if not deployment_found:
-            console.print(f"❌ No {display_name} deployment found. Available deployments:", style="red")
-            try:
-                result = kubectl("get", "deployments", "-o", "name", capture_output=True)
-                deployments = [dep.replace('deployment/', '') for dep in result.stdout.split('\n') if dep.strip()]
-                cw_deployments = [dep for dep in deployments if dep.startswith('cw-')]
-                if cw_deployments:
-                    console.print(f"CW deployments: {', '.join(cw_deployments)}", style="yellow")
-                else:
-                    console.print("No CW deployments found", style="yellow")
-            except subprocess.CalledProcessError:
-                console.print("Could not list deployments", style="yellow")
-            return 1
-        
-        # Wait a moment and show status
-        console.print("⏳ Waiting for rollout to start...", style="yellow")
-        time.sleep(3)
-        
-        # Show rollout status
-        for deployment_name in deployment_names:
-            try:
-                kubectl("get", "deployment", deployment_name, capture_output=True)
-                console.print(f"📊 Rollout status for {deployment_name}:", style="blue")
-                kubectl("rollout", "status", "deployment", deployment_name)
-                break
-            except subprocess.CalledProcessError:
-                continue
-        
-        console.print(f"🎉 {display_name} service restart completed!", style="green bold")
-        console.print(f"💡 Check status with: [cyan]cw pods -A | grep {service_name}[/]", style="dim")
-        
-        return 0
-        
-    except subprocess.CalledProcessError as e:
-        console.print(f"❌ Failed to restart {service} service: {e}", style="red")
-        return 1
+        return restart_grpo_service_command(
+            framework_name="axolotl",  # Default to axolotl for backward compatibility
+            service_name=service
+        )
     except Exception as e:
-        console.print(f"❌ Error restarting {service} service: {e}", style="red")
+        console.print(format_error_for_user(e), style="red")
+        suggestion = get_error_suggestions(e)
+        if suggestion:
+            console.print(suggestion, style="yellow")
         return 1
 
 
