@@ -284,7 +284,7 @@ def update_grpo_yaml_with_resources(yaml_path: Path, config_data: Dict[str, Any]
     return '---\n'.join(yaml.dump(doc, default_flow_style=False) for doc in yaml_docs if doc)
 
 
-def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False) -> bool:
+def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False, services_only: bool = False) -> bool:
     """Deploy all GRPO services in the correct order."""
     grpo_dir = Path(__file__).parent / "kubeconfigs" / "axolotl" / "grpo"
     
@@ -296,12 +296,14 @@ def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False)
     if not run_kubectl_command(configmap_yaml):
         return False
     
-    # Deploy services in order: VLLM, Rewards, Training
+    # Deploy services in order: VLLM, Rewards, Training (skip training if services_only)
     services = [
         ("VLLM Server", "vllm-deployment.yaml"),
         ("Rewards Server", "rewards-deployment.yaml"),
-        ("Training Job", "training-job.yaml")
     ]
+    
+    if not services_only:
+        services.append(("Training Job", "training-job.yaml"))
     
     for service_name, yaml_file in services:
         console.print(f"🚀 Deploying {service_name}...", style="blue")
@@ -331,7 +333,7 @@ def deploy_grpo_services(config_data: Dict[str, Any], pull_latest: bool = False)
     return True
 
 
-def deploy_verifiers_services(config_data: Dict[str, Any], pull_latest: bool = False) -> bool:
+def deploy_verifiers_services(config_data: Dict[str, Any], pull_latest: bool = False, services_only: bool = False) -> bool:
     """Deploy all Verifiers GRPO services in the correct order."""
     verifiers_dir = Path(__file__).parent / "kubeconfigs" / "verifiers"
     
@@ -343,12 +345,14 @@ def deploy_verifiers_services(config_data: Dict[str, Any], pull_latest: bool = F
     if not run_kubectl_command(configmap_yaml):
         return False
     
-    # Deploy services in order: VLLM, Rewards, Training
+    # Deploy services in order: VLLM, Rewards, Training (skip training if services_only)
     services = [
         ("Verifiers VLLM Server", "vllm-deployment.yaml"),
         ("Verifiers Rewards Server", "rewards-deployment.yaml"),
-        ("Verifiers Training Job", "training-job.yaml")
     ]
+    
+    if not services_only:
+        services.append(("Verifiers Training Job", "training-job.yaml"))
     
     for service_name, yaml_file in services:
         console.print(f"🚀 Deploying {service_name}...", style="blue")

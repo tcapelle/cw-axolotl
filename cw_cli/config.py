@@ -17,6 +17,7 @@ class GrpoConfig:
     """Train a model with GRPO (requires multi-service deployment)"""
     config: str = field(positional=True, help="Path to the GRPO config YAML file")
     pull: bool = field(default=False, alias="--pull", help="Pull latest axolotl_dev code before training")
+    services: bool = field(default=False, alias="--services", help="Only launch services (VLLM and rewards) without training")
 
 
 @dataclass
@@ -30,6 +31,7 @@ class VerifiersConfig:
     """Train a model with Verifiers GRPO (requires multi-service deployment)"""
     config: str = field(positional=True, help="Path to the Verifiers config YAML file")
     pull: bool = field(default=False, alias="--pull", help="Pull latest verifiers code before training")
+    services: bool = field(default=False, alias="--services", help="Only launch services (VLLM and rewards) without training")
 
 
 @dataclass 

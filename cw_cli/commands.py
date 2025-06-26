@@ -266,33 +266,41 @@ def grpo_command(grpo_config) -> int:
     if overrides:
         config_data = apply_overrides(config_data, overrides)
     
-    # Validate GRPO config
-    if config_data.get('rl') != 'grpo':
+    # Validate GRPO config (skip validation for services-only mode)
+    if not grpo_config.services and config_data.get('rl') != 'grpo':
         console.print("❌ Error: Config must have 'rl: grpo' for GRPO training", style="red")
         return 1
     
     # Deploy GRPO services
-    console.print("🚀 Deploying GRPO services...", style="blue")
-    if not deploy_grpo_services(config_data, grpo_config.pull):
-        return 1
-    
-    console.print("🎉 GRPO training started successfully!", style="green bold")
-    
-    # Automatically follow training logs
-    job_name = "cw-axolotl-train-grpo"
-    console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
-    console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
-    
-    try:
-        _follow_job_logs(job_name)
-    except KeyboardInterrupt:
-        console.print("\n⏹️ Log following stopped.", style="yellow")
-        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
-    except Exception as e:
-        console.print(f"❌ Could not follow logs: {e}", style="red")
-        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
-    
-    return 0
+    if grpo_config.services:
+        console.print("🚀 Deploying GRPO services only (VLLM + Rewards)...", style="blue")
+        if not deploy_grpo_services(config_data, grpo_config.pull, services_only=True):
+            return 1
+        console.print("🎉 GRPO services deployed successfully!", style="green bold")
+        console.print("💡 Check services: [cyan]cw pods[/]")
+        return 0
+    else:
+        console.print("🚀 Deploying GRPO services...", style="blue")
+        if not deploy_grpo_services(config_data, grpo_config.pull):
+            return 1
+        
+        console.print("🎉 GRPO training started successfully!", style="green bold")
+        
+        # Automatically follow training logs
+        job_name = "cw-axolotl-train-grpo"
+        console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
+        console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
+        
+        try:
+            _follow_job_logs(job_name)
+        except KeyboardInterrupt:
+            console.print("\n⏹️ Log following stopped.", style="yellow")
+            console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
+        except Exception as e:
+            console.print(f"❌ Could not follow logs: {e}", style="red")
+            console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
+        
+        return 0
 
 
 def verifiers_grpo_command(verifiers_config) -> int:
@@ -329,27 +337,35 @@ def verifiers_grpo_command(verifiers_config) -> int:
         config_data = apply_overrides(config_data, overrides)
     
     # Deploy Verifiers services
-    console.print("🚀 Deploying Verifiers GRPO services...", style="blue")
-    if not deploy_verifiers_services(config_data, verifiers_config.pull):
-        return 1
-    
-    console.print("🎉 Verifiers GRPO training started successfully!", style="green bold")
-    
-    # Automatically follow training logs
-    job_name = "cw-verifiers-train-grpo"
-    console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
-    console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
-    
-    try:
-        _follow_job_logs(job_name)
-    except KeyboardInterrupt:
-        console.print("\n⏹️ Log following stopped.", style="yellow")
-        console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
-    except Exception as e:
-        console.print(f"❌ Could not follow logs: {e}", style="red")
-        console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
-    
-    return 0
+    if verifiers_config.services:
+        console.print("🚀 Deploying Verifiers services only (VLLM + Rewards)...", style="blue")
+        if not deploy_verifiers_services(config_data, verifiers_config.pull, services_only=True):
+            return 1
+        console.print("🎉 Verifiers services deployed successfully!", style="green bold")
+        console.print("💡 Check services: [cyan]cw pods[/]")
+        return 0
+    else:
+        console.print("🚀 Deploying Verifiers GRPO services...", style="blue")
+        if not deploy_verifiers_services(config_data, verifiers_config.pull):
+            return 1
+        
+        console.print("🎉 Verifiers GRPO training started successfully!", style="green bold")
+        
+        # Automatically follow training logs
+        job_name = "cw-verifiers-train-grpo"
+        console.print(f"\n🔄 Following training logs for {job_name}... (Press Ctrl+C to stop)")
+        console.print(f"💡 Check all services: [cyan]cw pods -A[/]")
+        
+        try:
+            _follow_job_logs(job_name)
+        except KeyboardInterrupt:
+            console.print("\n⏹️ Log following stopped.", style="yellow")
+            console.print(f"💡 To resume monitoring: [cyan]cw logs -j {job_name}[/]")
+        except Exception as e:
+            console.print(f"❌ Could not follow logs: {e}", style="red")
+            console.print(f"💡 Try manually: [cyan]cw logs -j {job_name}[/]")
+        
+        return 0
 
 
 def logs_command(logs_config) -> int:

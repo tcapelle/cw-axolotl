@@ -27,7 +27,9 @@ def main():
   cw axolotl sft config.yaml --gpu 6                  Override GPU count
   cw axolotl sft config.yaml --gpu 4 --batch_size 8   Override multiple params
   cw axolotl grpo train axolotl/grpo_config.yaml      Train with GRPO (3-service deployment)
+  cw axolotl grpo train config.yaml --services        Deploy only GRPO services (VLLM + Rewards)
   cw verifiers grpo verifiers/conf.yaml               Train with Verifiers GRPO
+  cw verifiers grpo config.yaml --services            Deploy only Verifiers services (VLLM + Rewards)
   
   # GRPO service management
   cw axolotl grpo restart vllm                Restart VLLM service
