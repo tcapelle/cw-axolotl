@@ -7,7 +7,11 @@ import time
 import json
 from typing import Dict, Any, List
 
-from .utils import console, kubectl, cleanup_grpo_services
+from .utils import (
+    console, kubectl, cleanup_grpo_services, 
+    get_available_devpods, prompt_devpod_selection, prompt_ssh_key_selection,
+    deploy_devpod, ssh_to_devpod, cleanup_devpod
+)
 from .display import create_table, create_summary, get_age_string, get_job_status_emoji
 
 
@@ -830,4 +834,114 @@ def info_command(nodes: bool = False) -> int:
         return show_cluster_info(nodes)
     except subprocess.CalledProcessError as e:
         console.print(f"❌ Failed to get cluster info: {e}", style="red")
+        return 1
+
+
+def devpod_command(config) -> int:
+    """Manage development pods."""
+    from .config import DevPodConfig
+    
+    action = config.action.lower()
+    
+    if action == "list":
+        # List all available devpods
+        devpods = get_available_devpods()
+        if not devpods:
+            console.print("📋 No devpods found in cluster", style="blue")
+            return 0
+        
+        console.print("📋 Available devpods:", style="blue")
+        for devpod in devpods:
+            console.print(f"  • {devpod}")
+        return 0
+    
+    elif action == "start":
+        # Create/start a devpod
+        name = config.name
+        if not name:
+            name = console.input("Enter devpod name: ").strip()
+            if not name:
+                console.print("❌ Name is required", style="red")
+                return 1
+        
+        # Get SSH key
+        ssh_key_path = config.ssh_key
+        if not ssh_key_path:
+            ssh_key_path = prompt_ssh_key_selection()
+            if not ssh_key_path:
+                console.print("❌ SSH key is required", style="red")
+                return 1
+        
+        # Deploy the devpod
+        success = deploy_devpod(name, ssh_key_path, config.gpu, config.cpu, config.memory)
+        if success:
+            console.print(f"✅ Devpod 'devpod-{name}' created successfully", style="green")
+            console.print(f"💡 Use 'cw devpod ssh {name}' to connect", style="blue")
+            return 0
+        else:
+            return 1
+    
+    elif action == "ssh":
+        # SSH to a devpod
+        devpod_name = config.name
+        if devpod_name:
+            devpod_name = f"devpod-{devpod_name}"
+        else:
+            devpod_name = prompt_devpod_selection("SSH to")
+            if not devpod_name:
+                return 1
+        
+        # Check if devpod exists
+        devpods = get_available_devpods()
+        if devpod_name not in devpods:
+            console.print(f"❌ Devpod '{devpod_name}' not found", style="red")
+            return 1
+        
+        success = ssh_to_devpod(devpod_name)
+        return 0 if success else 1
+    
+    elif action == "stop":
+        # Stop a devpod (scale to 0)
+        devpod_name = config.name
+        if devpod_name:
+            devpod_name = f"devpod-{devpod_name}"
+        else:
+            devpod_name = prompt_devpod_selection("stop")
+            if not devpod_name:
+                return 1
+        
+        try:
+            kubectl("scale", "statefulset", devpod_name, "--replicas=0")
+            console.print(f"✅ Devpod '{devpod_name}' stopped", style="green")
+            return 0
+        except subprocess.CalledProcessError as e:
+            console.print(f"❌ Failed to stop devpod: {e}", style="red")
+            return 1
+    
+    elif action == "delete":
+        # Delete a devpod completely
+        devpod_name = config.name
+        if devpod_name:
+            devpod_name = f"devpod-{devpod_name}"
+        else:
+            devpod_name = prompt_devpod_selection("delete")
+            if not devpod_name:
+                return 1
+        
+        # Confirm deletion
+        response = console.input(f"⚠️  This will permanently delete [red]{devpod_name}[/] and all its data. Continue? (y/N): ").strip().lower()
+        if response not in ['y', 'yes']:
+            console.print("⏹️ Cancelled", style="yellow")
+            return 0
+        
+        success = cleanup_devpod(devpod_name)
+        if success:
+            console.print(f"✅ Devpod '{devpod_name}' deleted successfully", style="green")
+            return 0
+        else:
+            return 1
+    
+    else:
+        console.print(f"❌ Unknown action: {action}", style="red")
+        console.print("Available actions: start, stop, ssh, delete, list", style="blue")
         return 1

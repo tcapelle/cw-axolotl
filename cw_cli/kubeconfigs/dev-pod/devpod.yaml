@@ -1,0 +1,258 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: devpod-2
+  namespace: default
+  labels:
+    app: devpod-2
+spec:
+  serviceName: "devpod-2"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devpod-2
+  template:
+    metadata:
+      labels:
+        parasail.io/deployment: parasail-devpod-2
+        parasail.io/owner: parasail
+        app: devpod-2
+    spec:
+      nodeSelector:
+        parasail-gpu-type: H200SXM
+      tolerations:
+      - key: sunk.coreweave.com/nodes
+        operator: Exists
+      containers:
+      - name: dind
+        image: docker:dind
+        securityContext:
+          privileged: true
+        args:
+        - "--host=tcp://0.0.0.0:2375"
+        - "--tls=false"
+        volumeMounts:
+        - name: docker-graph-storage
+          mountPath: /var/lib/docker
+        - name: devpod-storage
+          mountPath: /workspace/data
+          subPath: dind-workspace
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+      - name: devpod
+        image: ghcr.io/tcapelle/triton_eval:1006
+        ### Run start with an infinite sleep loop
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+            cpu: "64"
+            memory: "1200Gi"
+          requests:
+            cpu: "64"
+            memory: "1200Gi"
+            nvidia.com/gpu: "8"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Install SSH server and additional tools
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && apt-get install -y openssh-server tmux curl git wget
+          
+          # Install GitHub CLI
+          mkdir -p -m 755 /etc/apt/keyrings
+          out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg
+          cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+          chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          apt update && apt install gh -y
+          
+          # Setup git
+          git config --global user.email "tcapelle@pm.me"
+          git config --global user.name "Thomas Capelle"
+          
+          # Write environment variables to a file that SSH sessions can source
+          cat > /etc/environment-vars << EOF
+          export DOCKER_HOST="$DOCKER_HOST"
+          export WEAVE_PRINT_CALL_LINK="$WEAVE_PRINT_CALL_LINK"
+          export TOKENIZERS_PARALLELISM="$TOKENIZERS_PARALLELISM"
+          export WANDB_API_KEY="$WANDB_API_KEY"
+          export HF_TOKEN="$HF_TOKEN"
+          export OPENAI_API_KEY="$OPENAI_API_KEY"
+          export TRITON_SERVER_URL="$TRITON_SERVER_URL"
+          EOF
+          
+          mkdir -p /run/sshd
+          
+          # SSH config
+          sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+          sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+          sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+          sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config
+          echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
+          echo "UsePAM no" >> /etc/ssh/sshd_config
+          
+          # Create environment setup script for py3.11 environment
+          cat > /usr/local/bin/setup-env.sh << 'EOF'
+          #!/bin/bash
+          source /root/miniconda3/etc/profile.d/conda.sh
+          conda activate py3.11
+          export PATH="/root/miniconda3/envs/py3.11/bin:$PATH"
+          export PYTHONPATH="/app:$PYTHONPATH"
+          
+          # Source the environment variables
+          source /etc/environment-vars
+          
+          cd /app/axolotl_dev
+          exec /bin/bash "$@"
+          EOF
+          
+          chmod +x /usr/local/bin/setup-env.sh
+          
+          # Configure SSH to use our environment setup
+          echo "ForceCommand /usr/local/bin/setup-env.sh" >> /etc/ssh/sshd_config
+          
+          # Also set up .bashrc
+          echo 'source /root/miniconda3/etc/profile.d/conda.sh' >> /root/.bashrc
+          echo 'conda activate py3.11' >> /root/.bashrc
+          echo 'source /etc/environment-vars' >> /root/.bashrc
+          echo 'cd /app/axolotl_dev' >> /root/.bashrc
+          
+          # Set up authorized keys
+          mkdir -p /root/.ssh
+          cp /etc/ssh-keys/authorized_keys /root/.ssh/authorized_keys
+          chmod 700 /root/.ssh
+          chmod 600 /root/.ssh/authorized_keys
+          
+          # Start SSH server and keep running
+          /usr/sbin/sshd -D -e &
+          SSHD_PID=$!
+          
+          while true; do
+            sleep 3600
+            if ! kill -0 $SSHD_PID 2>/dev/null; then
+              /usr/sbin/sshd -D -e &
+              SSHD_PID=$!
+            fi
+          done
+        ports:
+        - containerPort: 2375
+          name: docker
+        - containerPort: 22
+          name: ssh
+        volumeMounts:
+        - name: shared-tools
+          mountPath: /shared
+        - name: devpod-storage
+          mountPath: /workspace/data
+        - name: ssh-keys
+          mountPath: /etc/ssh-keys
+          readOnly: true
+        - name: dshm
+          mountPath: /dev/shm
+        - name: model-checkpoints
+          mountPath: /model-checkpoints
+        env:
+        - name: DOCKER_HOST
+          value: "tcp://localhost:2375"
+        - name: TRITON_SERVER_URL
+          value: "http://axolotl-rewards-service:9347"
+        - name: WANDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb-api-key-secret
+              key: WANDB_API_KEY
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: HF_TOKEN
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-api-key-secret
+              key: OPENAI_API_KEY
+        - name: WEAVE_PRINT_CALL_LINK
+          value: "0"
+        - name: TOKENIZERS_PARALLELISM
+          value: "0"
+      volumes:
+      - name: shared-tools
+        emptyDir: {}
+      - name: ssh-keys
+        configMap:
+          name: devpod-2-ssh-keys
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 132Gi
+      - name: model-checkpoints
+        persistentVolumeClaim:
+          claimName: model-checkpoints
+  volumeClaimTemplates:
+  - metadata:
+      name: docker-graph-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 200Gi
+  - metadata:
+      name: devpod-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 500Gi
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: devpod-2-ssh
+  namespace: default
+spec:
+  entryPoints:
+    - parasailssh
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: devpod-2
+          namespace: default
+          port: 22
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devpod-2-ssh-keys
+  namespace: default
+data:
+  authorized_keys: |
+    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC1qbTIKmQHEFcjzpNbuYjMTAjYT23Tnr+K2UlOoF1xjYUzZTzTHhdm6YiLpB5QhGvd8A2NUWj+uGMN3kdhqrzSJC/J2fIRSi79i7zSPbRF5B/8OQ/uQJJF/mmCMda3Ys7xhYCzLcqqVMKTmipwP39+RHUPayR+nkmWGu7EnKDNzt7qmloFKrxQimIj+AGlOVaAl1gsAGXXYE3VZBQFs7OqgnnTTFI5dJuZNORY9ZMKEAvZROzBJ5ThivX1VD+pxFwXTnCMzBfvgzO/mXRAlHiNlGcla4wUtijb+UrXHSQF/DjBUkMjyinDQUHGM4VKaAy6aklX4AJqGPlcqZAh/+xpRfSr+fHtqmSG1BQkCXFrx791cLjGcoUrvjDFZv65/jSJpjXgtkiS7LkLPm3KUMn5gMhhmkyRr7RTFdoafFNNpTtnuzOsfIKQr7mMU5vOLDGBVJ4l9R7ZigcttfKgx5xCMaW/90cff3d31Y8jbPh2ZAkPHIu3r0L+Gicj+p2Ns9wy+QrZ5sXIvIQZK3L/3iPEaPkVzJ0mqd11YDIHnrnzKkN5CHmDrPzitA6AdMjtsjhxcrB/vaqyb/nmcEixro8k5BkcTi+ZuX7mVn8amysb4O/k9GdbbeT/JMYnKHyAaWQvvXMSywch4B6yBPxIfR827fqjKHLuSW4DlQ+tqD5dxQ== xiaoman@Xiaomans-MBP.MG8702
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMzYcNhRZOJK0k8935T9OuGiRYFmAGCELNeUBMFWescK tcapelle@M4Max.local
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBcD6GgW4mAt50jKgyv4xmnjNiRANl/iGo/GPsGAcTf+ zifei.tong@cloudex.io
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFlOG2+1T4mdRZ0swFuJoZmzu3pARSE0iMhdMywkhoiY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devpod-2
+  namespace: default
+  labels:
+    app: devpod-2
+spec: 
+  clusterIP: None
+  selector:
+    app: devpod-2
+    statefulset.kubernetes.io/pod-name: devpod-2-0
+  ports:
+  - port: 2375
+    name: docker
+    targetPort: 2375
+  - port: 22
+    name: ssh
+    targetPort: 22

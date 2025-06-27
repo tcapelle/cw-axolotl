@@ -61,7 +61,7 @@ spec:
           requests:
             cpu: "32"
             memory: "1000Gi"
-            nvidia.com/gpu: "6"
+            nvidia.com/gpu: "8"
         ports:
         # README mentioned ssh -L 9347:localhost:9347 for rewards server
         - containerPort: 9347

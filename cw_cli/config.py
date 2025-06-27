@@ -96,3 +96,14 @@ class GpuConfig:
     """Watch GPU usage on training nodes"""
     job: str = field(default="", help="Job name (optional - will prompt if not provided)")
     interval: int = field(default=2, alias="-i", help="Update interval in seconds (default: 2)")
+
+
+@dataclass
+class DevPodConfig:
+    """Manage development pods"""
+    action: str = field(positional=True, help="Action to perform: start, stop, ssh, delete, list")
+    name: str = field(default="", alias="--name", help="Pod name (will be devpod-<name>)")
+    gpu: int = field(default=8, alias="--gpu", help="Number of GPUs to request (default: 8)")
+    cpu: int = field(default=64, alias="--cpu", help="Number of CPUs to request (default: 64)")
+    memory: str = field(default="1200Gi", alias="--memory", help="Memory to request (default: 1200Gi)")
+    ssh_key: str = field(default="", alias="--ssh-key", help="SSH key file path (will prompt if not provided)")

@@ -6,11 +6,11 @@ from simple_parsing import ArgumentParser
 
 from .config import (
     TrainConfig, GrpoConfig, GrpoRestartConfig, VerifiersConfig, LogsConfig, StatusConfig, DeleteConfig, 
-    ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig, GpuConfig
+    ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig, GpuConfig, DevPodConfig
 )
 from .commands import (
     train_command, grpo_command, grpo_restart_command, verifiers_grpo_command, logs_command, status_command, delete_command,
-    list_command, jobs_command, pods_command, info_command, resources_command, gpu_command
+    list_command, jobs_command, pods_command, info_command, resources_command, gpu_command, devpod_command
 )
 
 
@@ -50,6 +50,15 @@ def main():
   cw logs -j my-job                           Follow specific job logs
   cw delete                                   Select job to delete
   cw delete my-job                            Delete specific job
+  
+  # Development pods
+  cw devpod start                             Create/start a devpod (interactive)
+  cw devpod start mydev --gpu 4 --cpu 32     Create devpod with custom resources
+  cw devpod ssh                               SSH to devpod (interactive selection)
+  cw devpod ssh mydev                         SSH to specific devpod
+  cw devpod list                              List all devpods
+  cw devpod stop mydev                        Stop a devpod
+  cw devpod delete mydev                      Delete a devpod
   
   # Quick workflows
   cw jobs | grep Running                      Find running jobs
@@ -125,6 +134,11 @@ def main():
     delete_parser = subparsers_dict.add_parser("delete", help="Delete job")
     delete_parser.add_arguments(DeleteConfig, dest="delete_config")
     delete_parser.set_defaults(func=lambda args: delete_command(args.delete_config.job))
+    
+    # Development pods
+    devpod_parser = subparsers_dict.add_parser("devpod", help="Manage development pods")
+    devpod_parser.add_arguments(DevPodConfig, dest="devpod_config")
+    devpod_parser.set_defaults(func=lambda args: devpod_command(args.devpod_config))
     
     # Legacy
     list_parser = subparsers_dict.add_parser("list", help="List axolotl jobs")

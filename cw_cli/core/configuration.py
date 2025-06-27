@@ -38,8 +38,9 @@ class ResourceRequirements(BaseModel):
 
 class TrainingConfig(BaseModel):
     """Base training configuration."""
-    # Core training parameters
-    base_model: str
+    # Core training parameters (framework-specific)
+    base_model: Optional[str] = None  # Used by axolotl
+    model_name_or_path: Optional[str] = None  # Used by verifiers
     model_type: Optional[str] = None
     tokenizer_type: Optional[str] = None
     
@@ -65,6 +66,20 @@ class TrainingConfig(BaseModel):
     
     # Framework-specific fields (flexible)
     rl: Optional[str] = None  # For GRPO
+    
+    def validate_for_framework(self, framework: str = None) -> bool:
+        """Validate configuration for specific framework."""
+        if framework == "axolotl":
+            if not self.base_model:
+                raise ValueError("'base_model' is required for axolotl configurations")
+        elif framework == "verifiers":
+            if not self.model_name_or_path:
+                raise ValueError("'model_name_or_path' is required for verifiers configurations")
+        else:
+            # For unknown frameworks, require at least one model field
+            if not self.base_model and not self.model_name_or_path:
+                raise ValueError("Either 'base_model' or 'model_name_or_path' must be provided")
+        return True
     
     class Config:
         extra = "allow"  # Allow additional fields for framework flexibility
@@ -94,8 +109,16 @@ class ConfigurationManager:
         try:
             # Create Pydantic model for validation
             validated_config = TrainingConfig(**config_data)
+            
+            # Perform framework-specific validation
+            if framework:
+                validated_config.validate_for_framework(framework)
+            
             return validated_config
         except ValidationError as e:
+            raise ValueError(f"Configuration validation failed: {e}")
+        except ValueError as e:
+            # Re-raise framework-specific validation errors
             raise ValueError(f"Configuration validation failed: {e}")
     
     def merge_overrides(self, config_data: Dict[str, Any], 
@@ -166,8 +189,10 @@ class ConfigurationManager:
     
     def get_config_summary(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
         """Get a summary of configuration for display."""
+        # Handle both base_model (axolotl) and model_name_or_path (verifiers)
+        model = config_data.get('base_model') or config_data.get('model_name_or_path', 'Unknown')
         summary = {
-            'model': config_data.get('base_model', 'Unknown'),
+            'model': model,
             'training_type': 'GRPO' if config_data.get('rl') == 'grpo' else 'SFT',
             'learning_rate': config_data.get('learning_rate'),
             'epochs': config_data.get('num_epochs'),

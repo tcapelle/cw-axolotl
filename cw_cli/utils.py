@@ -2,8 +2,9 @@
 import subprocess
 import yaml
 import time
+import json
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 from rich.console import Console
 from rich.table import Table
 from rich.layout import Layout
@@ -415,3 +416,256 @@ def cleanup_grpo_services() -> bool:
 def get_default_image() -> str:
     """Get the default container image (fallback)."""
     return 'ghcr.io/tcapelle/triton_eval:1906'
+
+
+def get_available_ssh_keys() -> List[str]:
+    """Get list of available SSH keys from ~/.ssh directory."""
+    ssh_dir = Path.home() / ".ssh"
+    if not ssh_dir.exists():
+        return []
+    
+    ssh_keys = []
+    # Look for public key files
+    for key_file in ssh_dir.glob("*.pub"):
+        ssh_keys.append(str(key_file))
+    
+    return sorted(ssh_keys)
+
+
+def prompt_ssh_key_selection() -> str:
+    """Prompt user to select an SSH key from available keys."""
+    ssh_keys = get_available_ssh_keys()
+    
+    if not ssh_keys:
+        console.print("❌ No SSH public keys found in ~/.ssh", style="red")
+        return ""
+    
+    if len(ssh_keys) == 1:
+        key_path = ssh_keys[0]
+        console.print(f"🔑 Using SSH key: [cyan]{key_path}[/]", style="blue")
+        return key_path
+    
+    console.print("🔑 Available SSH keys:", style="blue")
+    for i, key_path in enumerate(ssh_keys, 1):
+        # Show just the filename
+        key_name = Path(key_path).name
+        console.print(f"  {i}. {key_name}")
+    
+    try:
+        choice = console.input(f"\nSelect SSH key (1-{len(ssh_keys)}): ").strip()
+        idx = int(choice) - 1
+        if 0 <= idx < len(ssh_keys):
+            return ssh_keys[idx]
+        else:
+            console.print("❌ Invalid selection", style="red")
+            return ""
+    except (ValueError, KeyboardInterrupt):
+        console.print("\n⏹️ Cancelled", style="yellow")
+        return ""
+
+
+def get_available_devpods() -> List[str]:
+    """Get list of available devpods in the cluster."""
+    try:
+        result = kubectl("get", "statefulsets", "-o", "json", capture_output=True)
+        sts_data = json.loads(result.stdout)
+        devpods = [sts['metadata']['name'] for sts in sts_data.get('items', []) 
+                   if sts['metadata']['name'].startswith('devpod-')]
+        return devpods
+    except Exception:
+        return []
+
+
+def prompt_devpod_selection(action: str) -> str:
+    """Prompt user to select a devpod from available devpods."""
+    devpods = get_available_devpods()
+    
+    if not devpods:
+        console.print(f"❌ No devpods found in cluster", style="red")
+        return ""
+    
+    if len(devpods) == 1:
+        devpod_name = devpods[0]
+        response = console.input(f"Do you want to {action} [cyan]{devpod_name}[/]? (y/N): ").strip().lower()
+        return devpod_name if response in ['y', 'yes'] else ""
+    
+    console.print(f"📋 Available devpods:", style="blue")
+    for i, devpod in enumerate(devpods, 1):
+        console.print(f"  {i}. {devpod}")
+    
+    try:
+        choice = console.input(f"\nSelect devpod to {action} (1-{len(devpods)} or name): ").strip()
+        
+        # Try to parse as number
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(devpods):
+                return devpods[idx]
+        except ValueError:
+            pass
+        
+        # Try to match by name
+        if choice in devpods:
+            return choice
+        
+        # Partial match
+        matches = [devpod for devpod in devpods if choice.lower() in devpod.lower()]
+        if len(matches) == 1:
+            return matches[0]
+        elif len(matches) > 1:
+            console.print(f"❌ Multiple matches found: {', '.join(matches)}", style="red")
+        else:
+            console.print(f"❌ No devpod found matching '{choice}'", style="red")
+        
+    except KeyboardInterrupt:
+        console.print("\n⏹️ Cancelled", style="yellow")
+    
+    return ""
+
+
+def create_devpod_yaml(name: str, ssh_key_path: str, gpu: int = 8, cpu: int = 64, memory: str = "1200Gi") -> str:
+    """Create devpod YAML with parameterized values."""
+    devpod_template_path = Path(__file__).parent / "kubeconfigs" / "dev-pod" / "devpod.yaml"
+    
+    with open(devpod_template_path, 'r') as f:
+        yaml_content = f.read()
+    
+    # Read SSH public key content
+    try:
+        with open(ssh_key_path, 'r') as f:
+            ssh_key_content = f.read().strip()
+    except Exception as e:
+        console.print(f"❌ Failed to read SSH key {ssh_key_path}: {e}", style="red")
+        return ""
+    
+    # Replace placeholders in the YAML content
+    yaml_content = yaml_content.replace("devpod-2", f"devpod-{name}")
+    yaml_content = yaml_content.replace("parasail-devpod-2", f"parasail-devpod-{name}")
+    
+    # Parse YAML to update resources and SSH key
+    yaml_docs = list(yaml.safe_load_all(yaml_content))
+    
+    for doc in yaml_docs:
+        if not doc:
+            continue
+            
+        # Update StatefulSet resources
+        if doc.get('kind') == 'StatefulSet':
+            containers = doc.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+            for container in containers:
+                if container.get('name') == 'devpod':
+                    container['resources'] = {
+                        'limits': {
+                            'nvidia.com/gpu': str(gpu),
+                            'cpu': str(cpu),
+                            'memory': memory
+                        },
+                        'requests': {
+                            'nvidia.com/gpu': str(gpu),
+                            'cpu': str(cpu),
+                            'memory': memory
+                        }
+                    }
+        
+        # Update ConfigMap with SSH key
+        elif doc.get('kind') == 'ConfigMap':
+            config_name = doc.get('metadata', {}).get('name', '')
+            if config_name.startswith('devpod-') and config_name.endswith('-ssh-keys'):
+                doc['data']['authorized_keys'] = ssh_key_content
+    
+    # Convert back to YAML string
+    return '---\n'.join(yaml.dump(doc, default_flow_style=False) for doc in yaml_docs if doc)
+
+
+def deploy_devpod(name: str, ssh_key_path: str, gpu: int = 8, cpu: int = 64, memory: str = "1200Gi") -> bool:
+    """Deploy a new devpod with the specified configuration."""
+    console.print(f"🚀 Deploying devpod-{name}...", style="blue")
+    
+    # Check if devpod already exists
+    existing_devpods = get_available_devpods()
+    if f"devpod-{name}" in existing_devpods:
+        console.print(f"❌ Devpod 'devpod-{name}' already exists", style="red")
+        return False
+    
+    # Create the YAML configuration
+    yaml_content = create_devpod_yaml(name, ssh_key_path, gpu, cpu, memory)
+    if not yaml_content:
+        return False
+    
+    # Apply the configuration
+    return run_kubectl_command(yaml_content)
+
+
+def ssh_to_devpod(devpod_name: str) -> bool:
+    """SSH to a devpod."""
+    console.print(f"🔐 Connecting to {devpod_name} via SSH...", style="blue")
+    
+    try:
+        # Get the service port-forward command
+        cmd = ["kubectl", "port-forward", f"service/{devpod_name}", "2222:22"]
+        console.print(f"$ {' '.join(cmd)}", style="dim white")
+        
+        # Start port-forward in background
+        port_forward_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Give port-forward time to establish
+        time.sleep(2)
+        
+        # SSH to localhost:2222
+        ssh_cmd = ["ssh", "-p", "2222", "root@localhost"]
+        console.print(f"$ {' '.join(ssh_cmd)}", style="dim white")
+        
+        # Execute SSH interactively
+        result = subprocess.run(ssh_cmd)
+        
+        # Clean up port-forward
+        port_forward_proc.terminate()
+        port_forward_proc.wait()
+        
+        return result.returncode == 0
+        
+    except Exception as e:
+        console.print(f"❌ SSH connection failed: {e}", style="red")
+        return False
+
+
+def cleanup_devpod(devpod_name: str) -> bool:
+    """Clean up a devpod and all its resources."""
+    console.print(f"🗑️ Deleting devpod {devpod_name}...", style="blue")
+    
+    success = True
+    
+    # Resources to clean up
+    resources = [
+        ("statefulset", devpod_name),
+        ("service", devpod_name),
+        ("configmap", f"{devpod_name}-ssh-keys"),
+        ("ingressroutetcp", f"{devpod_name}-ssh"),
+    ]
+    
+    for resource_type, resource_name in resources:
+        try:
+            kubectl("delete", resource_type, resource_name, capture_output=True)
+            console.print(f"✅ {resource_type.capitalize()} {resource_name} deleted", style="green")
+        except subprocess.CalledProcessError:
+            console.print(f"⚠️  {resource_type.capitalize()} {resource_name} not found or failed to delete", style="yellow")
+            success = False
+    
+    # Also clean up PVCs
+    try:
+        result = kubectl("get", "pvc", "-o", "json", capture_output=True)
+        pvcs_data = json.loads(result.stdout)
+        
+        for pvc in pvcs_data.get('items', []):
+            pvc_name = pvc['metadata']['name']
+            if devpod_name in pvc_name:
+                try:
+                    kubectl("delete", "pvc", pvc_name, capture_output=True)
+                    console.print(f"✅ PVC {pvc_name} deleted", style="green")
+                except subprocess.CalledProcessError:
+                    console.print(f"⚠️  PVC {pvc_name} failed to delete", style="yellow")
+                    success = False
+    except Exception:
+        pass
+    
+    return success
