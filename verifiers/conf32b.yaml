@@ -41,7 +41,7 @@ save_only_model: True
 
 logging_steps: 1
 log_on_each_node: False
-log_completions: True
+log_completions: False
 save_total_limit: 3
 
 # specify the vllm address and port
