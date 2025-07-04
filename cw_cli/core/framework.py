@@ -12,6 +12,7 @@ class TrainingType(Enum):
     """Supported training types."""
     SFT = "sft"
     GRPO = "grpo"
+    EVAL = "eval"
 
 
 @dataclass
@@ -172,6 +173,8 @@ class VerifiersFramework(BaseTrainingFramework):
         """Get ConfigMap name for Verifiers."""
         if training_type == TrainingType.GRPO:
             return "cw-verifiers-train-grpo-config"
+        elif training_type == TrainingType.EVAL:
+            return "cw-verifiers-eval-config"
         else:
             raise ValueError(f"Unsupported training type: {training_type}")
     
@@ -179,6 +182,8 @@ class VerifiersFramework(BaseTrainingFramework):
         """Get Job name for Verifiers."""
         if training_type == TrainingType.GRPO:
             return "cw-verifiers-train-grpo"
+        elif training_type == TrainingType.EVAL:
+            return "cw-verifiers-eval-grpo"
         else:
             raise ValueError(f"Unsupported training type: {training_type}")
     
@@ -189,6 +194,12 @@ class VerifiersFramework(BaseTrainingFramework):
                 self.kubeconfig_dir / "verifiers" / "vllm-deployment.yaml",
                 self.kubeconfig_dir / "verifiers" / "rewards-deployment.yaml",
                 self.kubeconfig_dir / "verifiers" / "training-job.yaml"
+            ]
+        elif training_type == TrainingType.EVAL:
+            return [
+                self.kubeconfig_dir / "verifiers" / "vllm-deployment.yaml",
+                self.kubeconfig_dir / "verifiers" / "rewards-deployment.yaml",
+                self.kubeconfig_dir / "verifiers" / "eval-model.yaml"
             ]
         else:
             raise ValueError(f"Unsupported training type: {training_type}")

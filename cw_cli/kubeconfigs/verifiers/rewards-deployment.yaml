@@ -48,11 +48,11 @@ spec:
             python sandbox/server.py
         env:
           - name: TASK_TIMEOUT_SECONDS
-            value: "30"
+            value: "60"
           - name: WORKER_JOIN_TIMEOUT
             value: "20"
           - name: CONCURRENCY_PER_GPU
-            value: "2"
+            value: "4"
         resources:
           limits:
             nvidia.com/gpu: "8"

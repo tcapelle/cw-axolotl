@@ -215,6 +215,29 @@ def verifiers_grpo_command(verifiers_config) -> int:
         return 1
 
 
+def verifiers_eval_command(eval_config) -> int:
+    """Evaluate a model with Verifiers using new architecture."""
+    from .core.commands import train_eval_command
+    from .core.exceptions import format_error_for_user, get_error_suggestions
+    
+    try:
+        return train_eval_command(
+            framework_name="verifiers",
+            config_path=eval_config.config,
+            model_name=eval_config.model_name,
+            dataset_name=eval_config.dataset_name,
+            num_generations=eval_config.num_generations,
+            pull_latest=eval_config.pull,
+            services_only=eval_config.services
+        )
+    except Exception as e:
+        console.print(format_error_for_user(e), style="red")
+        suggestion = get_error_suggestions(e)
+        if suggestion:
+            console.print(suggestion, style="yellow")
+        return 1
+
+
 def logs_command(logs_config) -> int:
     """View job logs."""
     try:

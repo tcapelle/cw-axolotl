@@ -5,11 +5,11 @@ import sys
 from simple_parsing import ArgumentParser
 
 from .config import (
-    TrainConfig, GrpoConfig, GrpoRestartConfig, VerifiersConfig, LogsConfig, StatusConfig, DeleteConfig, 
+    TrainConfig, GrpoConfig, GrpoRestartConfig, VerifiersConfig, EvalConfig, LogsConfig, StatusConfig, DeleteConfig, 
     ListConfig, JobsConfig, PodsConfig, InfoConfig, ResourcesConfig, GpuConfig, DevPodConfig
 )
 from .commands import (
-    train_command, grpo_command, grpo_restart_command, verifiers_grpo_command, logs_command, status_command, delete_command,
+    train_command, grpo_command, grpo_restart_command, verifiers_grpo_command, verifiers_eval_command, logs_command, status_command, delete_command,
     list_command, jobs_command, pods_command, info_command, resources_command, gpu_command, devpod_command
 )
 
@@ -100,6 +100,10 @@ def main():
     verifiers_grpo_parser = verifiers_subparsers.add_parser("grpo", help="Train with Verifiers GRPO")
     verifiers_grpo_parser.add_arguments(VerifiersConfig, dest="verifiers_config")
     verifiers_grpo_parser.set_defaults(func=lambda args: verifiers_grpo_command(args.verifiers_config))
+    
+    verifiers_eval_parser = verifiers_subparsers.add_parser("eval", help="Evaluate with Verifiers")
+    verifiers_eval_parser.add_arguments(EvalConfig, dest="eval_config")
+    verifiers_eval_parser.set_defaults(func=lambda args: verifiers_eval_command(args.eval_config))
     
     # Resource listing
     jobs_parser = subparsers_dict.add_parser("jobs", help="List jobs")

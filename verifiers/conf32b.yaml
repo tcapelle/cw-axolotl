@@ -4,31 +4,33 @@ image: "ghcr.io/tcapelle/triton_eval:1906"
 # GRPO Training Configuration
 seed: 42
 
-model_name_or_path: "/model-checkpoints/qwen-32b-vf_ep1-v2/checkpoint-700"
-dataset_name: "tcapelle/boostrap_oai_pt_think"
+# model_name_or_path: "/model-checkpoints/qwen-32b-vf_ep2-v2/checkpoint-500"
+model_name_or_path: "/model-checkpoints/qwen-32b-vf_ep1-v2/checkpoint-700/"
+dataset_name: "tcapelle/bootstrap_oai_pt_think"
 field_messages: "prompt"
+max_turns: 4
 
 wandb_entity: "grpo-cuda"
 wandb_project: "verifiers"
-wandb_name: "qwen-32b-vf_ep2-v2"
+wandb_name: "qwen-32b-vf_ep3-v2-4steps"
 
 output_dir: "/model-checkpoints/"
 
 bf16: True
 
-per_device_train_batch_size: 4
-gradient_accumulation_steps: 3
-num_generations: 12
-num_train_epochs: 3
-max_prompt_length: 4000  # Remove length limit
-max_completion_length: 8000
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 12
+num_generations: 8
+num_train_epochs: 1
+max_prompt_length: 16000 # 32768  # Remove length limit
+max_completion_length: 16000 # 38912
 beta: 0.0
-temperature: 1.0
-async_generation_timeout: 400.0
+temperature: 0.8
+async_generation_timeout: 600
 num_iterations: 1
 
-learning_rate: 1e-6
-max_grad_norm: 1e-2
+learning_rate: 1e-3
+max_grad_norm: 1e-7
 lr_scheduler_type: "constant_with_warmup"
 warmup_steps: 10
 gradient_checkpointing: True
@@ -40,22 +42,23 @@ save_only_model: True
 logging_steps: 1
 log_on_each_node: False
 log_completions: True
-save_total_limit: 2
+save_total_limit: 3
+
+# specify the vllm address and port
+vllm_server_host: "cw-verifiers-vllm-service"
+vllm_server_port: 8000
 
 ###############################################################
 ## rewards server
 triton_server_url: "http://cw-verifiers-rewards-service-grpo:9347"
+triton_run_endpoint: "/run_triton"
+triton_benchmark: True
+triton_benchmark_runs: 10
 
 ###############################################################
 ## vllm config
-vllm_server_host: "cw-verifiers-vllm-service"
-vllm_server_port: 8000
-
-# Memory and performance settings
-gpu-memory-utilization: 0.9  # Ratio of GPU memory to reserve (0-1)
-max-model-len: 12000         # Maximum model sequence length
-
-# Batching and request handling
-max-batch-size: 1024                  # Max requests per LLM batch
-batch-request-timeout-seconds: 300    # Request timeout in seconds
-token-chunk-size: 4096                  # Tokens per chunk in dynamic batching
+vllm:
+  host: "0.0.0.0"
+  gpu_memory_utilization: 0.95  # Ratio of GPU memory to reserve (0-1)
+  max_model_len: 32000         # Maximum model sequence length
+  tensor_parallel_size: 8

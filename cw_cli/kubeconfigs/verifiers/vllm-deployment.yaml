@@ -60,7 +60,7 @@ spec:
             pip install git+https://github.com/tcapelle/verifiers.git@weave
 
             # Run vllm server
-            vf-vllm --config /mnt/verifiers-config/config.yaml --tensor_parallel_size 8
+            vf-vllm --config /mnt/verifiers-config/config.yaml
         resources:
           limits:
             nvidia.com/gpu: "8"

@@ -34,6 +34,17 @@ class VerifiersConfig:
     services: bool = field(default=False, alias="--services", help="Only launch services (VLLM and rewards) without training")
 
 
+@dataclass
+class EvalConfig:
+    """Evaluate a model with Verifiers (requires multi-service deployment)"""
+    config: str = field(positional=True, help="Path to the Verifiers config YAML file")
+    model_name: str = field(default="", alias="--model_name", help="Model name/path to override in config")
+    dataset_name: str = field(default="", alias="--dataset_name", help="Dataset name to override in config")
+    num_generations: int = field(default=0, alias="--num_generations", help="Number of generations to override in config")
+    pull: bool = field(default=False, alias="--pull", help="Pull latest verifiers code before evaluation")
+    services: bool = field(default=False, alias="--services", help="Only launch services (VLLM and rewards) without evaluation")
+
+
 @dataclass 
 class LogsConfig:
     """View job logs"""
